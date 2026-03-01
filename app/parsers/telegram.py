@@ -20,9 +20,10 @@ class TelegramParser(BaseParser):
     def _extract_username(self) -> str:
         """Извлечение username канала из URL"""
         # https://t.me/durov -> durov
+        # https://t.me/s/durov -> durov
         if '/s/' in self.url:
-            return self.url.split('/s/')[-1].rstrip('/')
-        return self.url.split('t.me/')[-1].rstrip('/')
+            return self.url.split('/s/')[-1].split('?')[0].rstrip('/')
+        return self.url.split('t.me/')[-1].split('?')[0].rstrip('/')
     
     async def parse(self) -> List[ParsedItem]:
         """Парсинг канала через t.me/s/"""
@@ -32,23 +33,37 @@ class TelegramParser(BaseParser):
             # Используем публичный веб-интерфейс t.me/s/
             parse_url = f"https://t.me/s/{self.channel_username}"
             
+            logger.info(f"Парсинг Telegram канала: {parse_url}")
+            
             async with httpx.AsyncClient(timeout=30.0, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            }) as client:
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+            }, follow_redirects=True) as client:
                 response = await client.get(parse_url)
                 response.raise_for_status()
+                
+                # Проверяем, не ошибка ли это
+                if 'Page not found' in response.text or 'channel not found' in response.text.lower():
+                    logger.error(f"Канал не найден: {self.channel_username}")
+                    return items
                 
                 from bs4 import BeautifulSoup
                 soup = BeautifulSoup(response.text, 'lxml')
                 
                 # Ищем посты
                 posts = soup.select('div.tgme_widget_message')
+                logger.info(f"Найдено постов: {len(posts)}")
                 
                 for post in posts[:10]:  # Лимит 10
                     item = self._parse_post(post)
                     if item:
                         items.append(item)
                         
+        except httpx.HTTPStatusError as e:
+            logger.error(f"HTTP ошибка при парсинге {self.channel_username}: {e.response.status_code}")
+        except httpx.RequestError as e:
+            logger.error(f"Ошибка запроса к {self.channel_username}: {e}")
         except Exception as e:
             logger.error(f"Ошибка парсинга Telegram {self.channel_username}: {e}")
         
