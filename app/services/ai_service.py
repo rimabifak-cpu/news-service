@@ -1,0 +1,134 @@
+"""
+Сервис для адаптации текста с помощью AI
+"""
+import httpx
+from typing import Optional
+from loguru import logger
+
+from app.config import settings
+
+
+class AIService:
+    """Сервис для работы с AI"""
+    
+    def __init__(self):
+        self.api_key = settings.AI_API_KEY
+        self.api_url = settings.AI_API_URL
+        self.model = settings.AI_MODEL
+    
+    async def adapt_text(
+        self,
+        original_text: str,
+        prompt: Optional[str] = None,
+        max_length: int = 2000
+    ) -> str:
+        """
+        Адаптация текста под стиль Telegram-канала
+        
+        Args:
+            original_text: Исходный текст
+            prompt: Пользовательский промт (опционально)
+            max_length: Максимальная длина результата
+        
+        Returns:
+            Адаптированный текст
+        """
+        if not self.api_key:
+            logger.warning("AI API key не настроен, возвращаем исходный текст")
+            return original_text
+        
+        default_prompt = """
+Адаптируй этот текст для публикации в Telegram-канале:
+- Сделай текст более живым и engaging
+- Добавь эмодзи где уместно (но не переусердствуй)
+- Разбей на короткие абзацы для удобства чтения
+- Выдели жирным ключевые моменты
+- Сохрани основной смысл и факты
+- Длина до 2000 символов
+"""
+        
+        system_prompt = prompt or default_prompt
+        
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"{self.api_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": "Ты профессиональный редактор Telegram-канала."},
+                            {"role": "user", "content": f"{system_prompt}\n\nИсходный текст:\n{original_text[:5000]}"}
+                        ],
+                        "max_tokens": 2000,
+                        "temperature": 0.7
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    adapted = data["choices"][0]["message"]["content"]
+                    return adapted.strip()
+                else:
+                    logger.error(f"AI API error: {response.status_code} - {response.text}")
+                    return original_text
+                    
+        except Exception as e:
+            logger.error(f"Ошибка AI сервиса: {e}")
+            return original_text
+    
+    async def generate_title(
+        self,
+        content: str,
+        max_length: int = 100
+    ) -> str:
+        """
+        Генерация цепляющего заголовка
+        
+        Args:
+            content: Содержание поста
+            max_length: Максимальная длина заголовка
+        
+        Returns:
+            Заголовок
+        """
+        if not self.api_key:
+            # Возвращаем первую строку контента
+            return content.split('\n')[0][:max_length]
+        
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.api_url}/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": "Ты создаёшь цепляющие заголовки для Telegram. Максимум {max_length} символов."},
+                            {"role": "user", "content": f"Создай цепляющий заголовок до {max_length} символов для этого текста:\n\n{content[:1000]}"}
+                        ],
+                        "max_tokens": 100,
+                        "temperature": 0.8
+                    }
+                )
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    title = data["choices"][0]["message"]["content"]
+                    return title.strip()[:max_length]
+                else:
+                    return content.split('\n')[0][:max_length]
+                    
+        except Exception as e:
+            logger.error(f"Ошибка генерации заголовка: {e}")
+            return content.split('\n')[0][:max_length]
+
+
+# Singleton
+ai_service = AIService()

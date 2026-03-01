@@ -1,0 +1,73 @@
+version: '3.8'
+
+services:
+  # PostgreSQL
+  postgres:
+    image: postgres:15-alpine
+    container_name: news_service_db
+    restart: always
+    environment:
+      POSTGRES_DB: news_db
+      POSTGRES_USER: news_user
+      POSTGRES_PASSWORD: news_password
+    volumes:
+      - news_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U news_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # News Service
+  news_service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: news_service
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://news_user:news_password@postgres/news_db
+      - APP_HOST=0.0.0.0
+      - APP_PORT=8001
+      - AI_API_KEY=${AI_API_KEY:-}
+      - AI_API_URL=${AI_API_URL:-https://api.openai.com/v1}
+      - AI_MODEL=${AI_MODEL:-gpt-4-turbo-preview}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - TELEGRAM_CHANNEL_ID=${TELEGRAM_CHANNEL_ID:-}
+      - LOGO_PATH=/app/static/images/logo.png
+      - UPLOAD_FOLDER=/app/static/uploads
+      - IMAGES_FOLDER=/app/static/images
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./static:/app/static
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Scheduler для парсинга
+  scheduler:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: news_scheduler
+    restart: always
+    depends_on:
+      - news_service
+      - postgres
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://news_user:news_password@postgres/news_db
+      - PARSER_INTERVAL=${PARSER_INTERVAL:-300}
+    command: python scheduler.py
+    volumes:
+      - ./static:/app/static
+
+volumes:
+  news_postgres_data:

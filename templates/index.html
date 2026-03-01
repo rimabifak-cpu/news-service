@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>News Service - Админ панель</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #2481cc;
+            --sidebar-width: 280px;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        .sidebar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 100vh;
+            width: var(--sidebar-width);
+            background: linear-gradient(180deg, #1c2b36 0%, #0d1117 100%);
+            color: #fff;
+            padding: 20px 0;
+            z-index: 1000;
+        }
+        
+        .sidebar-brand {
+            font-size: 1.5rem;
+            font-weight: bold;
+            padding: 0 20px;
+            margin-bottom: 30px;
+            color: var(--primary-color);
+        }
+        
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .sidebar-menu li a {
+            display: flex;
+            align-items: center;
+            padding: 12px 20px;
+            color: #adb5bd;
+            text-decoration: none;
+            transition: all 0.3s;
+        }
+        
+        .sidebar-menu li a:hover,
+        .sidebar-menu li a.active {
+            background: rgba(36, 129, 204, 0.1);
+            color: #fff;
+            border-left: 3px solid var(--primary-color);
+        }
+        
+        .sidebar-menu i {
+            margin-right: 12px;
+            font-size: 1.1rem;
+        }
+        
+        .main-content {
+            margin-left: var(--sidebar-width);
+            padding: 30px;
+        }
+        
+        .stat-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            transition: transform 0.2s;
+        }
+        
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        
+        .stat-card .icon {
+            width: 50px;
+            height: 50px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            margin-bottom: 15px;
+        }
+        
+        .stat-card .icon.blue { background: #e3f2fd; color: #2196f3; }
+        .stat-card .icon.green { background: #e8f5e9; color: #4caf50; }
+        .stat-card .icon.orange { background: #fff3e0; color: #ff9800; }
+        .stat-card .icon.red { background: #ffebee; color: #f44336; }
+        
+        .stat-card h3 {
+            font-size: 2rem;
+            font-weight: bold;
+            margin: 0;
+            color: #1a1a1a;
+        }
+        
+        .stat-card p {
+            color: #666;
+            margin: 5px 0 0 0;
+        }
+        
+        .content-card {
+            background: #fff;
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+            margin-bottom: 24px;
+        }
+        
+        .post-card {
+            border: 1px solid #e0e0e0;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 15px;
+            transition: all 0.3s;
+        }
+        
+        .post-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        
+        .post-card img {
+            max-width: 200px;
+            max-height: 150px;
+            border-radius: 8px;
+            object-fit: cover;
+        }
+        
+        .post-title {
+            font-weight: 600;
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+        }
+        
+        .post-content {
+            color: #666;
+            font-size: 0.95rem;
+            max-height: 100px;
+            overflow: hidden;
+        }
+        
+        .status-badge {
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        
+        .status-pending { background: #fff3e0; color: #ff9800; }
+        .status-processing { background: #e3f2fd; color: #2196f3; }
+        .status-ready { background: #e8f5e9; color: #4caf50; }
+        .status-published { background: #e8eaf6; color: #3f51b5; }
+        .status-rejected { background: #ffebee; color: #f44336; }
+        
+        .btn-publish {
+            background: #4caf50;
+            color: #fff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+        }
+        
+        .btn-publish:hover {
+            background: #43a047;
+            color: #fff;
+        }
+        
+        .btn-reject {
+            background: #f44336;
+            color: #fff;
+            border: none;
+            padding: 8px 20px;
+            border-radius: 6px;
+        }
+        
+        .btn-reject:hover {
+            background: #e53935;
+            color: #fff;
+        }
+        
+        .modal-header {
+            background: linear-gradient(135deg, var(--primary-color), #1976d2);
+            color: #fff;
+        }
+        
+        .form-label {
+            font-weight: 500;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar">
+        <div class="sidebar-brand">
+            <i class="bi bi-newspaper"></i> News Service
+        </div>
+        <ul class="sidebar-menu">
+            <li><a href="#" class="active" data-page="dashboard"><i class="bi bi-speedometer2"></i> Дашборд</a></li>
+            <li><a href="#" data-page="posts"><i class="bi bi-file-text"></i> Лента постов</a></li>
+            <li><a href="#" data-page="sources"><i class="bi bi-rss"></i> Источники</a></li>
+            <li><a href="#" data-page="settings"><i class="bi bi-gear"></i> Настройки</a></li>
+        </ul>
+    </div>
+    
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Dashboard -->
+        <div id="page-dashboard" class="page">
+            <h2 class="mb-4">Дашборд</h2>
+            
+            <div class="row g-4 mb-4">
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="icon blue"><i class="bi bi-rss"></i></div>
+                        <h3 id="stat-sources">0</h3>
+                        <p>Источников</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="icon orange"><i class="bi bi-clock-history"></i></div>
+                        <h3 id="stat-pending">0</h3>
+                        <p>Ожидают</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="icon green"><i class="bi bi-check-circle"></i></div>
+                        <h3 id="stat-ready">0</h3>
+                        <p>Готовы</p>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="stat-card">
+                        <div class="icon red"><i class="bi bi-send"></i></div>
+                        <h3 id="stat-published">0</h3>
+                        <p>Опубликовано</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="content-card">
+                <h4 class="mb-3">Последние посты</h4>
+                <div id="recent-posts"></div>
+            </div>
+        </div>
+        
+        <!-- Posts -->
+        <div id="page-posts" class="page d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Лента постов</h2>
+                <div class="btn-group">
+                    <button class="btn btn-outline-secondary" onclick="loadPosts('all')">Все</button>
+                    <button class="btn btn-outline-success" onclick="loadPosts('ready')">Готовы</button>
+                    <button class="btn btn-outline-primary" onclick="loadPosts('published')">Опубликованы</button>
+                </div>
+            </div>
+            
+            <div class="content-card">
+                <div id="posts-list"></div>
+            </div>
+        </div>
+        
+        <!-- Sources -->
+        <div id="page-sources" class="page d-none">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h2>Источники новостей</h2>
+                <button class="btn btn-primary" onclick="showAddSourceModal()">
+                    <i class="bi bi-plus-lg"></i> Добавить источник
+                </button>
+            </div>
+            
+            <div class="content-card">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Название</th>
+                            <th>URL</th>
+                            <th>Тип</th>
+                            <th>AI</th>
+                            <th>Статус</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sources-list"></tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Settings -->
+        <div id="page-settings" class="page d-none">
+            <h2 class="mb-4">Настройки</h2>
+            
+            <div class="content-card">
+                <h4 class="mb-3">Telegram</h4>
+                <form id="settings-form">
+                    <div class="mb-3">
+                        <label class="form-label">Bot Token</label>
+                        <input type="text" class="form-control" id="bot-token" placeholder="123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Channel ID</label>
+                        <input type="text" class="form-control" id="channel-id" placeholder="@mychannel">
+                    </div>
+                    <button type="submit" class="btn btn-primary">Сохранить</button>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Add Source Modal -->
+    <div class="modal fade" id="addSourceModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Добавить источник</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="add-source-form">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Название</label>
+                                <input type="text" class="form-control" id="source-name" required>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">Тип</label>
+                                <select class="form-select" id="source-type">
+                                    <option value="website">Веб-сайт</option>
+                                    <option value="rss">RSS лента</option>
+                                    <option value="telegram">Telegram канал</option>
+                                    <option value="vk">ВКонтакте</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">URL</label>
+                            <input type="url" class="form-control" id="source-url" required placeholder="https://...">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">AI промт для адаптации (опционально)</label>
+                            <textarea class="form-control" id="source-ai-prompt" rows="3" placeholder="Адаптируй текст для Telegram-канала..."></textarea>
+                        </div>
+                        <div class="form-check mb-3">
+                            <input class="form-check-input" type="checkbox" id="source-ai-enabled" checked>
+                            <label class="form-check-label">Включить AI адаптацию</label>
+                        </div>
+                        
+                        <details>
+                            <summary class="cursor-pointer">Расширенные настройки парсера</summary>
+                            <div class="mt-3">
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Селектор заголовка</label>
+                                        <input type="text" class="form-control" id="source-selector-title" placeholder="h1">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Селектор контента</label>
+                                        <input type="text" class="form-control" id="source-selector-content" placeholder="article, .content">
+                                    </div>
+                                </div>
+                                <div class="row">
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Селектор изображения</label>
+                                        <input type="text" class="form-control" id="source-selector-image" placeholder="img.featured">
+                                    </div>
+                                    <div class="col-md-6 mb-3">
+                                        <label class="form-label">Селектор даты</label>
+                                        <input type="text" class="form-control" id="source-selector-date" placeholder="time, .date">
+                                    </div>
+                                </div>
+                            </div>
+                        </details>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="button" class="btn btn-primary" onclick="addSource()">Добавить</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/app.js"></script>
+</body>
+</html>
