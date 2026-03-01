@@ -19,6 +19,7 @@ document.querySelectorAll('.sidebar-menu a').forEach(link => {
         if (page === 'dashboard') loadDashboard();
         if (page === 'posts') loadPosts('all');
         if (page === 'sources') loadSources();
+        if (page === 'settings') loadSettings();
     });
 });
 
@@ -37,6 +38,25 @@ async function loadDashboard() {
         renderRecentPosts(posts);
     } catch (error) {
         console.error('Error loading dashboard:', error);
+    }
+}
+
+// Load Settings
+async function loadSettings() {
+    try {
+        const settings = await fetch(`${API_BASE}/api/settings`).then(r => r.json());
+        
+        document.getElementById('ai-api-key').value = settings.ai_api_key || 'Не настроен';
+        document.getElementById('ai-api-url').value = settings.ai_api_url || '';
+        document.getElementById('ai-model').value = settings.ai_model || '';
+        document.getElementById('bot-token').value = settings.telegram_bot_token || 'Не настроен';
+        document.getElementById('channel-id').value = settings.telegram_channel_id || '';
+        document.getElementById('logo-path').value = settings.logo_path || '';
+        document.getElementById('logo-position').value = settings.logo_position || '';
+        document.getElementById('logo-opacity').value = settings.logo_opacity || '';
+        document.getElementById('parser-interval').value = settings.parser_interval || '';
+    } catch (error) {
+        console.error('Error loading settings:', error);
     }
 }
 
@@ -267,6 +287,27 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// Settings functions
+function showEditSettingsModal() {
+    new bootstrap.Modal(document.getElementById('editSettingsModal')).show();
+}
+
+async function restartService() {
+    if (!confirm('Перезапустить сервис? Это займёт около 10-15 секунд.')) return;
+    
+    try {
+        // Показываем уведомление (так как нет API для перезапуска)
+        alert('Для перезапуска выполните на сервере:\n\ncd /opt/news_service\ndocker-compose restart\n\nИли нажмите OK, чтобы скопировать команду.');
+        
+        // Копируем команду в буфер
+        const cmd = 'cd /opt/news_service && docker-compose restart';
+        await navigator.clipboard.writeText(cmd);
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Ошибка при перезапуске');
+    }
 }
 
 // Initialize

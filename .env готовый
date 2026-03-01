@@ -1,0 +1,33 @@
+# ============================================
+#   News Service - Настройки
+# ============================================
+
+APP_HOST=0.0.0.0
+APP_PORT=8001
+DATABASE_URL=postgresql+asyncpg://news_user:news_password@postgres/news_db
+
+# AI - получите ключ на https://platform.openai.com/api-keys
+AI_API_KEY=
+AI_API_URL=https://api.openai.com/v1
+AI_MODEL=gpt-4-turbo-preview
+
+# Telegram
+TELEGRAM_BOT_TOKEN=8429912645:AAG95x5WDgqF8r42zFwnF8oLTPSGdQmMcUM
+TELEGRAM_CHANNEL_ID=@legaldecision_news
+
+# Логотип
+LOGO_PATH=/app/static/images/logo.svg
+LOGO_POSITION=bottom-right
+LOGO_OPACITY=0.7
+
+# Парсер
+PARSER_INTERVAL=300
+MAX_POSTS_PER_RUN=10
+
+# Хранилище
+UPLOAD_FOLDER=/app/static/uploads
+IMAGES_FOLDER=/app/static/images
+
+# Админ
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=admin123

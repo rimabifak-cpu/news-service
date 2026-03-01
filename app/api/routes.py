@@ -295,3 +295,21 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
         "sources_count": sources_count,
         "posts_by_status": posts_by_status
     }
+
+
+@router.get("/settings", response_model=dict)
+async def get_settings():
+    """Получить текущие настройки"""
+    from app.config import settings
+    
+    return {
+        "ai_api_key": settings.AI_API_KEY[:20] + "..." if settings.AI_API_KEY else "",
+        "ai_api_url": settings.AI_API_URL,
+        "ai_model": settings.AI_MODEL,
+        "telegram_bot_token": settings.TELEGRAM_BOT_TOKEN[:20] + "..." if settings.TELEGRAM_BOT_TOKEN else "",
+        "telegram_channel_id": settings.TELEGRAM_CHANNEL_ID,
+        "logo_path": settings.LOGO_PATH,
+        "logo_position": settings.LOGO_POSITION,
+        "logo_opacity": settings.LOGO_OPACITY,
+        "parser_interval": settings.PARSER_INTERVAL,
+    }
