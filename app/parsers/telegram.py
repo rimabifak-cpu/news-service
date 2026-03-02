@@ -29,21 +29,27 @@ class TelegramParser(BaseParser):
         """Парсинг канала через t.me/s/"""
         items = []
         
+        logger.info(f"Начинаем парсинг канала: {self.channel_username}")
+        
         try:
-            # Используем публичный веб-интерфейс t.me/s/
             parse_url = f"https://t.me/s/{self.channel_username}"
+            logger.info(f"URL для парсинга: {parse_url}")
             
-            logger.info(f"Парсинг Telegram канала: {parse_url}")
-            
-            async with httpx.AsyncClient(timeout=30.0, headers={
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-                'Accept-Language': 'en-US,en;q=0.5',
-            }, follow_redirects=True) as client:
+            async with httpx.AsyncClient(
+                timeout=30.0,
+                headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                    'Accept-Language': 'en-US,en;q=0.5',
+                },
+                follow_redirects=True,
+                verify=False  # Отключаем проверку SSL для обхода проблем
+            ) as client:
+                logger.info("Отправляем запрос к Telegram...")
                 response = await client.get(parse_url)
+                logger.info(f"Статус ответа: {response.status_code}")
                 response.raise_for_status()
                 
-                # Проверяем, не ошибка ли это
                 if 'Page not found' in response.text or 'channel not found' in response.text.lower():
                     logger.error(f"Канал не найден: {self.channel_username}")
                     return items
@@ -51,22 +57,26 @@ class TelegramParser(BaseParser):
                 from bs4 import BeautifulSoup
                 soup = BeautifulSoup(response.text, 'lxml')
                 
-                # Ищем посты
                 posts = soup.select('div.tgme_widget_message')
-                logger.info(f"Найдено постов: {len(posts)}")
+                logger.info(f"Найдено постов через CSS selector: {len(posts)}")
                 
-                for post in posts[:10]:  # Лимит 10
+                for idx, post in enumerate(posts[:10]):
+                    logger.info(f"Обработка поста {idx+1}")
                     item = self._parse_post(post)
                     if item:
+                        logger.info(f"Пост добавлен: {item.title[:50]}...")
                         items.append(item)
+                    else:
+                        logger.warning(f"Пост {idx+1} не распарсен")
                         
         except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP ошибка при парсинге {self.channel_username}: {e.response.status_code}")
+            logger.error(f"HTTP ошибка: {e.response.status_code} - {e}")
         except httpx.RequestError as e:
-            logger.error(f"Ошибка запроса к {self.channel_username}: {e}")
+            logger.error(f"Ошибка запроса: {e}")
         except Exception as e:
-            logger.error(f"Ошибка парсинга Telegram {self.channel_username}: {e}")
+            logger.error(f"Критическая ошибка парсинга: {e}", exc_info=True)
         
+        logger.info(f"Парсинг завершён. Всего постов: {len(items)}")
         return items
     
     def _parse_post(self, post) -> Optional[ParsedItem]:
