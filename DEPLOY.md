@@ -1,5 +1,9 @@
 # 🚀 Инструкция по деплою News Service
 
+## 📦 Репозиторий
+
+**GitHub:** https://github.com/rimabifak-cpu/news-service
+
 ## 📋 Быстрый деплой (через PowerShell)
 
 ### Шаг 1: Откройте PowerShell в папке проекта
@@ -24,6 +28,27 @@ cd C:\Users\HONOR\Documents\news_service
 ---
 
 ## 🔧 Ручной деплой (через SSH)
+
+### Вариант А: GitHub (рекомендуется)
+
+**На сервере:**
+```bash
+cd /opt/news_service
+git pull origin main
+```
+
+**После pull нужно:**
+```bash
+# Если есть миграции
+python migrate_add_content_hash.py
+
+# Перезапуск
+docker-compose restart
+```
+
+---
+
+### Вариант Б: Ручное копирование
 
 ### Шаг 1: Подключитесь к серверу
 
@@ -126,6 +151,22 @@ docker-compose restart
 
 ## 🔍 Управление сервисом
 
+### Обновление из GitHub (рекомендуется)
+
+```bash
+cd /opt/news_service
+git pull origin main
+
+# Если есть миграции БД
+python migrate_add_content_hash.py
+
+# Пересобрать и перезапустить
+docker-compose build --no-cache
+docker-compose up -d
+```
+
+### Базовые команды
+
 ```bash
 cd /opt/news_service
 
@@ -139,11 +180,6 @@ docker-compose restart
 docker-compose down
 
 # Запуск
-docker-compose up -d
-
-# Обновление из git
-git pull origin main
-docker-compose build --no-cache
 docker-compose up -d
 ```
 
