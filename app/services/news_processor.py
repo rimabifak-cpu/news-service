@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 import os
+import hashlib
 
 from app.models.db_models import Source, Post, PostStatus
 from app.database import async_session_maker
@@ -102,12 +103,19 @@ class NewsProcessor:
         item: ParsedItem
     ):
         """Обработка отдельного поста"""
-        # Проверяем, нет ли уже такого поста
+        # Вычисляем хеш контента
+        content_for_hash = f"{item.title}|{item.content}".encode('utf-8')
+        content_hash = hashlib.sha256(content_for_hash).hexdigest()
+        
+        # Проверяем, нет ли уже такого поста по URL или хешу
         result = await session.execute(
-            select(Post).where(Post.original_url == item.url)
+            select(Post).where(
+                (Post.original_url == item.url) | 
+                (Post.content_hash == content_hash)
+            )
         )
         if result.scalar_one_or_none():
-            logger.debug(f"Пост уже существует: {item.url}")
+            logger.debug(f"Пост уже существует: {item.url} (hash: {content_hash[:8]}...)")
             return
         
         # Создаём пост
@@ -118,6 +126,7 @@ class NewsProcessor:
             original_url=item.url,
             original_image_url=item.image_url,
             original_published_at=item.published_at,
+            content_hash=content_hash,  # Сохраняем хеш для дедупликации
             status=PostStatus.PROCESSING.value
         )
         

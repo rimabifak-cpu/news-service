@@ -51,8 +51,6 @@ class WebsiteParser(BaseParser):
                                 item = await self.parse_single(full_url)
                                 if item:
                                     items.append(item)
-                                    if len(items) >= 10:  # Лимит
-                                        break
         except Exception as e:
             logger.error(f"Ошибка парсинга {self.url}: {e}")
         

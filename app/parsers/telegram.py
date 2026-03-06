@@ -60,7 +60,7 @@ class TelegramParser(BaseParser):
                 posts = soup.select('div.tgme_widget_message')
                 logger.info(f"Найдено постов через CSS selector: {len(posts)}")
                 
-                for idx, post in enumerate(posts[:10]):
+                for idx, post in enumerate(posts):  # Без лимита
                     logger.info(f"Обработка поста {idx+1}")
                     item = self._parse_post(post)
                     if item:

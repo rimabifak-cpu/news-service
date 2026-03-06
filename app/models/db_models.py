@@ -74,6 +74,9 @@ class Post(Base):
     adapted_title = Column(Text)
     adapted_content = Column(Text)
     
+    # Хеш контента для дедупликации
+    content_hash = Column(String(64))  # SHA-256 хеш
+    
     # Обработанное изображение
     processed_image_path = Column(String(512))
     

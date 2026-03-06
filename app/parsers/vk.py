@@ -47,7 +47,7 @@ class VKParser(BaseParser):
                 # Ищем посты на стене
                 posts = soup.select('div.post')
                 
-                for post in posts[:10]:  # Лимит 10
+                for post in posts:  # Без лимита
                     item = self._parse_post(post)
                     if item:
                         items.append(item)

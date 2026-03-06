@@ -27,7 +27,7 @@ class RSSParser(BaseParser):
                 
                 feed = feedparser.parse(response.text)
                 
-                for entry in feed.entries[:10]:  # Лимит 10
+                for entry in feed.entries:  # Без лимита - получаем все записи
                     item = ParsedItem(
                         title=entry.title if hasattr(entry, 'title') else "Без названия",
                         content=entry.get('summary', '') or entry.get('description', ''),
