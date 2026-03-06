@@ -158,26 +158,30 @@ async function loadSources() {
 function renderSourcesList(sources) {
     const container = document.getElementById('sources-list');
     if (!sources || sources.length === 0) {
-        container.innerHTML = '<tr><td colspan="6" class="text-muted">Нет источников</td></tr>';
+        container.innerHTML = '<tr><td colspan="7" class="text-muted">Нет источников</td></tr>';
         return;
     }
-    
+
     container.innerHTML = sources.map(source => `
         <tr>
             <td><strong>${escapeHtml(source.name)}</strong></td>
             <td><a href="${escapeHtml(source.url)}" target="_blank">${escapeHtml(source.url)}</a></td>
             <td>${source.source_type}</td>
             <td>${source.ai_enabled ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-x-circle-fill text-muted"></i>'}</td>
+            <td><small class="text-muted">${source.ai_prompt ? escapeHtml(source.ai_prompt.substring(0, 50)) + '...' : '—'}</small></td>
             <td>
                 <span class="badge ${source.is_active ? 'bg-success' : 'bg-secondary'}">
                     ${source.is_active ? 'Активен' : 'Неактивен'}
                 </span>
             </td>
             <td>
-                <button class="btn btn-sm btn-outline-primary" onclick="parseSource(${source.id})">
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="editSource(${source.id})" title="Редактировать">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-success me-1" onclick="parseSource(${source.id})" title="Парсить">
                     <i class="bi bi-arrow-clockwise"></i>
                 </button>
-                <button class="btn btn-sm btn-outline-danger" onclick="deleteSource(${source.id})">
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteSource(${source.id})" title="Удалить">
                     <i class="bi bi-trash"></i>
                 </button>
             </td>
@@ -187,6 +191,11 @@ function renderSourcesList(sources) {
 
 // Actions
 function showAddSourceModal() {
+    // Очищаем форму
+    document.getElementById('add-source-form').reset();
+    document.querySelector('#addSourceModal .modal-title').textContent = 'Добавить источник';
+    document.querySelector('#addSourceModal .btn-primary').textContent = 'Добавить';
+    document.querySelector('#addSourceModal .btn-primary').onclick = addSource;
     new bootstrap.Modal(document.getElementById('addSourceModal')).show();
 }
 
@@ -202,24 +211,91 @@ async function addSource() {
         selector_image: document.getElementById('source-selector-image').value,
         selector_date: document.getElementById('source-selector-date').value,
     };
-    
+
     try {
         const response = await fetch(`${API_BASE}/api/sources`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
         });
-        
+
         if (response.ok) {
             bootstrap.Modal.getInstance(document.getElementById('addSourceModal')).hide();
             loadSources();
             alert('Источник добавлен');
         } else {
-            alert('Ошибка при добавлении источника');
+            const error = await response.json();
+            alert(`Ошибка: ${error.detail}`);
         }
     } catch (error) {
         console.error('Error adding source:', error);
         alert('Ошибка при добавлении источника');
+    }
+}
+
+// Глобальная переменная для хранения ID редактируемого источника
+let editingSourceId = null;
+
+async function editSource(sourceId) {
+    try {
+        // Получаем данные источника
+        const source = await fetch(`${API_BASE}/api/sources/${sourceId}`).then(r => r.json());
+        
+        // Заполняем форму
+        document.getElementById('source-name').value = source.name;
+        document.getElementById('source-url').value = source.url;
+        document.getElementById('source-type').value = source.source_type;
+        document.getElementById('source-ai-prompt').value = source.ai_prompt || '';
+        document.getElementById('source-ai-enabled').checked = source.ai_enabled;
+        document.getElementById('source-selector-title').value = source.selector_title || '';
+        document.getElementById('source-selector-content').value = source.selector_content || '';
+        document.getElementById('source-selector-image').value = source.selector_image || '';
+        document.getElementById('source-selector-date').value = source.selector_date || '';
+        
+        // Меняем заголовок и кнопку
+        document.querySelector('#addSourceModal .modal-title').textContent = 'Редактировать источник';
+        document.querySelector('#addSourceModal .btn-primary').textContent = 'Сохранить';
+        document.querySelector('#addSourceModal .btn-primary').onclick = () => updateSource(sourceId);
+        
+        editingSourceId = sourceId;
+        new bootstrap.Modal(document.getElementById('addSourceModal')).show();
+    } catch (error) {
+        console.error('Error loading source:', error);
+        alert('Ошибка при загрузке источника');
+    }
+}
+
+async function updateSource(sourceId) {
+    const data = {
+        name: document.getElementById('source-name').value,
+        url: document.getElementById('source-url').value,
+        source_type: document.getElementById('source-type').value,
+        ai_prompt: document.getElementById('source-ai-prompt').value,
+        ai_enabled: document.getElementById('source-ai-enabled').checked,
+        selector_title: document.getElementById('source-selector-title').value,
+        selector_content: document.getElementById('source-selector-content').value,
+        selector_image: document.getElementById('source-selector-image').value,
+        selector_date: document.getElementById('source-selector-date').value,
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/api/sources/${sourceId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('addSourceModal')).hide();
+            loadSources();
+            alert('Источник обновлён');
+        } else {
+            const error = await response.json();
+            alert(`Ошибка: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error updating source:', error);
+        alert('Ошибка при обновлении источника');
     }
 }
 
