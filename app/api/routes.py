@@ -14,6 +14,7 @@ from app.database import get_db
 from app.models.db_models import Source, Post, PostStatus, SourceType
 from app.services.news_processor import news_processor
 from app.services.telegram_service import telegram_service
+from app.config import settings
 
 router = APIRouter()
 
@@ -268,9 +269,11 @@ async def publish_post(
         raise HTTPException(status_code=400, detail="Пост не готов к публикации")
     
     # Формируем текст поста
-    text = f"<b>{post.adapted_title or post.original_title}</b>\n\n"
-    text += post.adapted_content or post.original_content
-    text += f"\n\n<a href='{post.original_url}'>Источник</a>"
+    title = post.adapted_title or post.original_title or "Без заголовка"
+    content = post.adapted_content or post.original_content or ""
+    original_url = post.original_url or ""
+    
+    text = f"<b>{title}</b>\n\n{content}\n\n<a href='{original_url}'>Источник</a>"
     
     # Проверяем настройки Telegram
     if not settings.TELEGRAM_BOT_TOKEN:
