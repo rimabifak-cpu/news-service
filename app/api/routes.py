@@ -185,6 +185,25 @@ async def parse_source(
     return {"message": f"Обработано {count} постов"}
 
 
+@router.post("/parse-all")
+async def parse_all_sources():
+    """Принудительный парсинг всех источников"""
+    from app.database import async_session_maker
+    from sqlalchemy import select
+    from app.models.db_models import Source
+    
+    async with async_session_maker() as session:
+        result = await session.execute(select(Source).where(Source.is_active == True))
+        sources = result.scalars().all()
+    
+    total_count = 0
+    for source in sources:
+        count = await news_processor.process_source(source.id)
+        total_count += count
+    
+    return {"message": f"Обработано {total_count} постов из {len(sources)} источников"}}
+
+
 # === Посты ===
 
 @router.get("/posts", response_model=List[PostResponse])

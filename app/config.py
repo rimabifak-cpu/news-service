@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     LOGO_OPACITY: float = 0.7
     
     # Parser
-    PARSER_INTERVAL: int = 300
+    PARSER_INTERVAL: int = 60  # 1 минута
     MAX_POSTS_PER_RUN: int = 10
     
     # Storage

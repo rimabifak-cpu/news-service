@@ -276,9 +276,14 @@
         <div id="page-sources" class="page d-none">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h2>Источники новостей</h2>
-                <button class="btn btn-primary" onclick="showAddSourceModal()">
-                    <i class="bi bi-plus-lg"></i> Добавить источник
-                </button>
+                <div>
+                    <button class="btn btn-success me-2" onclick="parseAllSources()">
+                        <i class="bi bi-play-fill"></i> Парсить все
+                    </button>
+                    <button class="btn btn-primary" onclick="showAddSourceModal()">
+                        <i class="bi bi-plus-lg"></i> Добавить источник
+                    </button>
+                </div>
             </div>
             
             <div class="content-card">

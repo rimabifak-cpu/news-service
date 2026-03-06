@@ -235,6 +235,21 @@ async function parseSource(sourceId) {
     }
 }
 
+async function parseAllSources() {
+    if (!confirm('Запустить парсинг всех источников?')) return;
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/parse-all`, { method: 'POST' });
+        const result = await response.json();
+        alert(result.message);
+        loadDashboard();
+        loadSources();
+    } catch (error) {
+        console.error('Error parsing all sources:', error);
+        alert('Ошибка при парсинге');
+    }
+}
+
 async function deleteSource(sourceId) {
     if (!confirm('Вы уверены, что хотите удалить этот источник?')) return;
     
