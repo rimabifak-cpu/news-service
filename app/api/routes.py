@@ -11,7 +11,7 @@ from loguru import logger
 from datetime import datetime
 
 from app.database import get_db
-from app.models.db_models import Source, Post, PostStatus, SourceType
+from app.models.db_models import Source, Post, PostStatus, SourceType, Channel
 from app.services.news_processor import news_processor
 from app.services.telegram_service import telegram_service
 from app.config import settings
@@ -25,6 +25,7 @@ class SourceCreate(BaseModel):
     name: str
     url: str
     source_type: str = "website"
+    channel_id: int  # Обязательный канал
     selector_title: Optional[str] = None
     selector_content: Optional[str] = None
     selector_image: Optional[str] = None
@@ -37,6 +38,7 @@ class SourceCreate(BaseModel):
 class SourceUpdate(BaseModel):
     name: Optional[str] = None
     url: Optional[str] = None
+    channel_id: Optional[int] = None
     is_active: Optional[bool] = None
     selector_title: Optional[str] = None
     selector_content: Optional[str] = None
@@ -52,6 +54,7 @@ class SourceResponse(BaseModel):
     name: str
     url: str
     source_type: str
+    channel_id: int
     is_active: bool
     auto_publish: bool
     last_parsed: Optional[datetime]
@@ -70,7 +73,47 @@ class PostResponse(BaseModel):
     status: str
     processed_image_path: Optional[str]
     created_at: datetime
-    
+
+    class Config:
+        from_attributes = True
+
+
+# === Каналы ===
+
+class ChannelCreate(BaseModel):
+    name: str
+    bot_token: str
+    channel_id: str
+    ai_prompt: Optional[str] = None
+    logo_path: Optional[str] = None
+    logo_position: str = "bottom-right"
+    logo_opacity: float = 0.7
+
+
+class ChannelUpdate(BaseModel):
+    name: Optional[str] = None
+    bot_token: Optional[str] = None
+    channel_id: Optional[str] = None
+    ai_prompt: Optional[str] = None
+    logo_path: Optional[str] = None
+    logo_position: Optional[str] = None
+    logo_opacity: Optional[float] = None
+    is_active: Optional[bool] = None
+
+
+class ChannelResponse(BaseModel):
+    id: int
+    name: str
+    channel_id: str
+    bot_token: str  # masked in response
+    ai_prompt: Optional[str]
+    logo_path: Optional[str]
+    logo_position: str
+    logo_opacity: float
+    is_active: bool
+    sources_count: int = 0
+    created_at: datetime
+
     class Config:
         from_attributes = True
 
@@ -81,15 +124,17 @@ class PostResponse(BaseModel):
 async def get_sources(
     skip: int = 0,
     limit: int = 50,
+    channel_id: Optional[int] = None,  # Фильтр по каналу
     db: AsyncSession = Depends(get_db)
 ):
     """Получить список источников"""
-    result = await db.execute(
-        select(Source)
-        .offset(skip)
-        .limit(limit)
-        .order_by(Source.created_at.desc())
-    )
+    query = select(Source).order_by(Source.created_at.desc())
+    
+    if channel_id:
+        query = query.where(Source.channel_id == channel_id)
+    
+    query = query.offset(skip).limit(limit)
+    result = await db.execute(query)
     return result.scalars().all()
 
 
@@ -99,10 +144,18 @@ async def create_source(
     db: AsyncSession = Depends(get_db)
 ):
     """Создать новый источник"""
+    # Проверяем существование канала
+    channel_result = await db.execute(select(Channel).where(Channel.id == source_data.channel_id))
+    channel = channel_result.scalar_one_or_none()
+    
+    if not channel:
+        raise HTTPException(status_code=404, detail="Канал не найден")
+    
     source = Source(
         name=source_data.name,
         url=source_data.url,
         source_type=source_data.source_type,
+        channel_id=source_data.channel_id,
         selector_title=source_data.selector_title,
         selector_content=source_data.selector_content,
         selector_image=source_data.selector_image,
@@ -350,7 +403,7 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
     # Количество источников
     sources_result = await db.execute(select(func.count(Source.id)))
     sources_count = sources_result.scalar()
-    
+
     # Количество постов по статусам
     posts_by_status = {}
     for status_val in PostStatus:
@@ -358,11 +411,148 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
             select(func.count(Post.id)).where(Post.status == status_val.value)
         )
         posts_by_status[status_val.value] = result.scalar()
-    
+
     return {
         "sources_count": sources_count,
         "posts_by_status": posts_by_status
     }
+
+
+# === Эндпоинты для каналов ===
+
+@router.get("/channels", response_model=List[ChannelResponse])
+async def get_channels(db: AsyncSession = Depends(get_db)):
+    """Получить список каналов"""
+    result = await db.execute(select(Channel).order_by(Channel.created_at.desc()))
+    channels = result.scalars().all()
+    
+    # Добавляем количество источников для каждого канала
+    channels_with_count = []
+    for channel in channels:
+        sources_result = await db.execute(
+            select(func.count(Source.id)).where(Source.channel_id == channel.id)
+        )
+        sources_count = sources_result.scalar()
+        
+        channel_dict = {
+            "id": channel.id,
+            "name": channel.name,
+            "channel_id": channel.channel_id,
+            "bot_token": channel.bot_token[:20] + "..." if len(channel.bot_token) > 20 else channel.bot_token,
+            "ai_prompt": channel.ai_prompt,
+            "logo_path": channel.logo_path,
+            "logo_position": channel.logo_position,
+            "logo_opacity": channel.logo_opacity,
+            "is_active": channel.is_active,
+            "created_at": channel.created_at,
+            "sources_count": sources_count
+        }
+        channels_with_count.append(channel_dict)
+    
+    return channels_with_count
+
+
+@router.post("/channels", response_model=ChannelResponse, status_code=status.HTTP_201_CREATED)
+async def create_channel(
+    channel_data: ChannelCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Создать новый канал"""
+    channel = Channel(
+        name=channel_data.name,
+        bot_token=channel_data.bot_token,
+        channel_id=channel_data.channel_id,
+        ai_prompt=channel_data.ai_prompt,
+        logo_path=channel_data.logo_path,
+        logo_position=channel_data.logo_position,
+        logo_opacity=channel_data.logo_opacity,
+    )
+
+    db.add(channel)
+    await db.commit()
+    await db.refresh(channel)
+
+    return channel
+
+
+@router.get("/channels/{channel_id}", response_model=ChannelResponse)
+async def get_channel(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Получить канал по ID"""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+
+    if not channel:
+        raise HTTPException(status_code=404, detail="Канал не найден")
+
+    return channel
+
+
+@router.put("/channels/{channel_id}", response_model=ChannelResponse)
+async def update_channel(
+    channel_id: int,
+    channel_data: ChannelUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Обновить канал"""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+
+    if not channel:
+        raise HTTPException(status_code=404, detail="Канал не найден")
+
+    update_data = channel_data.model_dump(exclude_unset=True)
+    for field, value in update_data.items():
+        setattr(channel, field, value)
+
+    await db.commit()
+    await db.refresh(channel)
+
+    return channel
+
+
+@router.delete("/channels/{channel_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_channel(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Удалить канал"""
+    result = await db.execute(select(Channel).where(Channel.id == channel_id))
+    channel = result.scalar_one_or_none()
+
+    if not channel:
+        raise HTTPException(status_code=404, detail="Канал не найден")
+
+    # Проверяем, есть ли источники
+    sources_result = await db.execute(
+        select(func.count(Source.id)).where(Source.channel_id == channel_id)
+    )
+    sources_count = sources_result.scalar()
+
+    if sources_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Нельзя удалить канал с {sources_count} источниками. Сначала удалите источники."
+        )
+
+    await db.delete(channel)
+    await db.commit()
+
+    return None
+
+
+@router.get("/channels/{channel_id}/sources", response_model=List[SourceResponse])
+async def get_channel_sources(
+    channel_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Получить источники канала"""
+    result = await db.execute(
+        select(Source).where(Source.channel_id == channel_id).order_by(Source.created_at.desc())
+    )
+    return result.scalars().all()
 
 
 @router.get("/settings", response_model=dict)
