@@ -31,6 +31,7 @@ class SourceCreate(BaseModel):
     selector_date: Optional[str] = None
     ai_prompt: Optional[str] = None
     ai_enabled: bool = True
+    auto_publish: bool = False
 
 
 class SourceUpdate(BaseModel):
@@ -43,6 +44,7 @@ class SourceUpdate(BaseModel):
     selector_date: Optional[str] = None
     ai_prompt: Optional[str] = None
     ai_enabled: Optional[bool] = None
+    auto_publish: Optional[bool] = None
 
 
 class SourceResponse(BaseModel):
@@ -51,9 +53,10 @@ class SourceResponse(BaseModel):
     url: str
     source_type: str
     is_active: bool
+    auto_publish: bool
     last_parsed: Optional[datetime]
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
 
@@ -106,12 +109,13 @@ async def create_source(
         selector_date=source_data.selector_date,
         ai_prompt=source_data.ai_prompt,
         ai_enabled=source_data.ai_enabled,
+        auto_publish=source_data.auto_publish,
     )
-    
+
     db.add(source)
     await db.commit()
     await db.refresh(source)
-    
+
     return source
 
 

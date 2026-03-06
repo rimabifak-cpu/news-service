@@ -158,7 +158,7 @@ async function loadSources() {
 function renderSourcesList(sources) {
     const container = document.getElementById('sources-list');
     if (!sources || sources.length === 0) {
-        container.innerHTML = '<tr><td colspan="7" class="text-muted">Нет источников</td></tr>';
+        container.innerHTML = '<tr><td colspan="8" class="text-muted">Нет источников</td></tr>';
         return;
     }
 
@@ -169,6 +169,9 @@ function renderSourcesList(sources) {
             <td>${source.source_type}</td>
             <td>${source.ai_enabled ? '<i class="bi bi-check-circle-fill text-success"></i>' : '<i class="bi bi-x-circle-fill text-muted"></i>'}</td>
             <td><small class="text-muted">${source.ai_prompt ? escapeHtml(source.ai_prompt.substring(0, 50)) + '...' : '—'}</small></td>
+            <td>
+                ${source.auto_publish ? '<span class="badge bg-danger"><i class="bi bi-rocket-takeoff"></i> Авто</span>' : '<span class="badge bg-secondary">Ручная</span>'}
+            </td>
             <td>
                 <span class="badge ${source.is_active ? 'bg-success' : 'bg-secondary'}">
                     ${source.is_active ? 'Активен' : 'Неактивен'}
@@ -206,6 +209,7 @@ async function addSource() {
         source_type: document.getElementById('source-type').value,
         ai_prompt: document.getElementById('source-ai-prompt').value,
         ai_enabled: document.getElementById('source-ai-enabled').checked,
+        auto_publish: document.getElementById('source-auto-publish').checked,
         selector_title: document.getElementById('source-selector-title').value,
         selector_content: document.getElementById('source-selector-content').value,
         selector_image: document.getElementById('source-selector-image').value,
@@ -247,6 +251,7 @@ async function editSource(sourceId) {
         document.getElementById('source-type').value = source.source_type;
         document.getElementById('source-ai-prompt').value = source.ai_prompt || '';
         document.getElementById('source-ai-enabled').checked = source.ai_enabled;
+        document.getElementById('source-auto-publish').checked = source.auto_publish;
         document.getElementById('source-selector-title').value = source.selector_title || '';
         document.getElementById('source-selector-content').value = source.selector_content || '';
         document.getElementById('source-selector-image').value = source.selector_image || '';
@@ -272,6 +277,7 @@ async function updateSource(sourceId) {
         source_type: document.getElementById('source-type').value,
         ai_prompt: document.getElementById('source-ai-prompt').value,
         ai_enabled: document.getElementById('source-ai-enabled').checked,
+        auto_publish: document.getElementById('source-auto-publish').checked,
         selector_title: document.getElementById('source-selector-title').value,
         selector_content: document.getElementById('source-selector-content').value,
         selector_image: document.getElementById('source-selector-image').value,

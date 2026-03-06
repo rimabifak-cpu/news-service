@@ -44,7 +44,8 @@ class Source(Base):
     # AI настройки
     ai_prompt = Column(Text)  # Промт для адаптации текста
     ai_enabled = Column(Boolean, default=True)
-    
+    auto_publish = Column(Boolean, default=False)  # Автопубликация без модерации
+
     # Метаданные
     last_parsed = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)

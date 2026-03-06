@@ -197,10 +197,48 @@ class NewsProcessor:
             if image_path:
                 post.processed_image_path = image_path
 
-        post.status = PostStatus.READY.value
-        await session.commit()
-
-        logger.info(f"  ✓ Пост {post.id} готов к публикации")
+        # Если включена автопубликация — публикуем сразу
+        if source.auto_publish:
+            logger.info(f"  🚀 Автопубликация поста ID={post.id}...")
+            post.status = PostStatus.READY.value
+            await session.commit()
+            
+            # Публикуем в Telegram
+            try:
+                from app.services.telegram_service import telegram_service
+                
+                title = post.adapted_title or post.original_title or "Без заголовка"
+                content = post.adapted_content or post.original_content or ""
+                original_url = post.original_url or ""
+                
+                text = f"<b>{title}</b>\n\n{content}\n\n<a href='{original_url}'>Источник</a>"
+                image_path = post.processed_image_path
+                
+                if image_path and not os.path.exists(image_path):
+                    image_path = None
+                
+                message_id = await telegram_service.publish_post(text=text, image_path=image_path)
+                
+                if message_id:
+                    post.status = PostStatus.PUBLISHED.value
+                    post.telegram_message_id = message_id
+                    post.published_at = datetime.now()
+                    await session.commit()
+                    logger.info(f"  ✅ Пост {post.id} автопубликован, message_id: {message_id}")
+                else:
+                    post.status = PostStatus.READY.value  # Возвращаем в готовые если ошибка
+                    await session.commit()
+                    logger.warning(f"  ⚠️ Автопубликация поста {post.id} не удалась, возвращён в готовые")
+                    
+            except Exception as e:
+                logger.error(f"  ❌ Ошибка автопубликации поста {post.id}: {e}")
+                post.status = PostStatus.READY.value  # Возвращаем в готовые если ошибка
+                await session.commit()
+        else:
+            # Без автопубликации — оставляем в готовых
+            post.status = PostStatus.READY.value
+            await session.commit()
+            logger.info(f"  ✓ Пост {post.id} готов к публикации")
     
     async def _process_image(
         self,
