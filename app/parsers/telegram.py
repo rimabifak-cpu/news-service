@@ -18,7 +18,7 @@ class TelegramParser(BaseParser):
         # Извлекаем username канала из URL
         self.channel_username = self._extract_username()
         # Максимум постов для получения (можно настроить)
-        self.max_posts = source_config.get("max_posts", 100)
+        self.max_posts = source_config.get("max_posts", 20)
 
     def _extract_username(self) -> str:
         """Извлечение username канала из URL"""
@@ -33,11 +33,17 @@ class TelegramParser(BaseParser):
         items = []
         seen_urls = set()
 
-        logger.info(f"Начинаем парсинг канала: {self.channel_username}")
+        logger.info(f"=" * 60)
+        logger.info(f"Начинаем парсинг канала: @{self.channel_username}")
+        logger.info(f"Максимум постов: {self.max_posts}")
+        logger.info(f"=" * 60)
 
         # Пагинация: ?offset=20, ?offset=40, etc.
         offset = 0
         max_pages = self.max_posts // 20 + 1  # 20 постов на странице
+        total_found = 0
+        total_new = 0
+        total_duplicates = 0
 
         try:
             async with httpx.AsyncClient(
@@ -55,7 +61,7 @@ class TelegramParser(BaseParser):
                     if offset > 0:
                         parse_url += f"?offset={offset}"
 
-                    logger.info(f"Парсинг страницы {page+1}: {parse_url}")
+                    logger.info(f"Страница {page+1}/{max_pages}: {parse_url}")
 
                     response = await client.get(parse_url)
 
@@ -72,30 +78,51 @@ class TelegramParser(BaseParser):
 
                     posts = soup.select('div.tgme_widget_message')
                     logger.info(f"Найдено постов на странице: {len(posts)}")
+                    total_found += len(posts)
 
                     if not posts:
                         logger.info("Больше нет постов, прекращаем пагинацию")
                         break
 
                     new_posts_count = 0
-                    for post in posts:
-                        item = self._parse_post(post)
-                        if item and item.url not in seen_urls:
-                            seen_urls.add(item.url)
-                            items.append(item)
-                            new_posts_count += 1
+                    duplicate_posts_count = 0
 
-                    logger.info(f"Добавлено {new_posts_count} новых постов")
+                    for idx, post in enumerate(posts):
+                        item = self._parse_post(post)
+                        
+                        if not item:
+                            logger.warning(f"  Пост #{idx+1}: НЕ распарсен (ошибка)")
+                            continue
+
+                        # Проверяем на дубликат по URL
+                        if item.url in seen_urls:
+                            duplicate_posts_count += 1
+                            total_duplicates += 1
+                            logger.debug(f"  Пост #{idx+1}: ПРОПУЩЕН (дубликат URL)")
+                            continue
+
+                        seen_urls.add(item.url)
+                        items.append(item)
+                        new_posts_count += 1
+                        total_new += 1
+                        
+                        # Краткая информация о посте
+                        title_preview = item.title[:50].replace('\n', ' ') if item.title else "Без заголовка"
+                        has_image = "✓" if item.image_url else "✗"
+                        logger.info(f"  Пост #{idx+1}: ДОБАВлен | {title_preview}... | Изображение: {has_image}")
+
+                    logger.info(f"Страница {page+1}: добавлено {new_posts_count}, пропущено дубликатов: {duplicate_posts_count}")
 
                     # Если новых постов нет или меньше 20 — дальше нет смысла
-                    if new_posts_count == 0 or new_posts_count < 20:
+                    if new_posts_count == 0 or (page == 0 and new_posts_count < 20):
                         logger.info("Достигли конца ленты")
                         break
 
                     offset += 20
 
                     # Небольшая задержка между страницами
-                    await asyncio.sleep(1)
+                    if page < max_pages - 1:
+                        await asyncio.sleep(1)
 
         except httpx.HTTPStatusError as e:
             logger.error(f"HTTP ошибка: {e.response.status_code} - {e}")
@@ -104,7 +131,13 @@ class TelegramParser(BaseParser):
         except Exception as e:
             logger.error(f"Критическая ошибка парсинга: {e}", exc_info=True)
 
-        logger.info(f"Парсинг завершён. Всего постов: {len(items)}")
+        logger.info(f"=" * 60)
+        logger.info(f"Парсинг завершён!")
+        logger.info(f"  Всего найдено постов: {total_found}")
+        logger.info(f"  Добавлено новых: {total_new}")
+        logger.info(f"  Пропущено дубликатов: {total_duplicates}")
+        logger.info(f"=" * 60)
+
         return items
 
     def _parse_post(self, post) -> Optional[ParsedItem]:

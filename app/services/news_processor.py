@@ -33,10 +33,10 @@ class NewsProcessor:
     async def process_source(self, source_id: int) -> int:
         """
         Обработка источника новостей
-        
+
         Args:
             source_id: ID источника
-        
+
         Returns:
             Количество обработанных постов
         """
@@ -46,38 +46,66 @@ class NewsProcessor:
                 select(Source).where(Source.id == source_id)
             )
             source = result.scalar_one_or_none()
-            
+
             if not source or not source.is_active:
                 logger.warning(f"Источник {source_id} не найден или не активен")
                 return 0
-            
-            logger.info(f"Начинаем обработку источника: {source.name}")
-            
+
+            logger.info(f"=" * 60)
+            logger.info(f"ИСТОЧНИК: {source.name} ({source.source_type})")
+            logger.info(f"URL: {source.url}")
+            logger.info(f"=" * 60)
+
             # Получаем парсер
             parser = self._get_parser(source)
             if not parser:
                 logger.error(f"Не удалось создать парсер для {source.source_type}")
                 return 0
-            
+
             # Парсим
             items = await parser.parse()
-            logger.info(f"Найдено {len(items)} постов")
-            
+            logger.info(f"Всего найдено постов: {len(items)}")
+
             # Обрабатываем каждый пост
-            processed_count = 0
+            new_count = 0
+            duplicate_count = 0
+            error_count = 0
+            
             for item in items:
                 try:
-                    await self._process_item(session, source, item)
-                    processed_count += 1
+                    # Проверяем на дубликат перед обработкой
+                    content_for_hash = f"{item.title}|{item.content}".encode('utf-8')
+                    content_hash = hashlib.sha256(content_for_hash).hexdigest()
+                    
+                    existing = await session.execute(
+                        select(Post).where(
+                            (Post.original_url == item.url) |
+                            (Post.content_hash == content_hash)
+                        )
+                    )
+                    
+                    if existing.scalar_one_or_none():
+                        duplicate_count += 1
+                        logger.debug(f"  ✗ Пропущен дубликат: {item.url[:60]}...")
+                    else:
+                        await self._process_item(session, source, item)
+                        new_count += 1
                 except Exception as e:
-                    logger.error(f"Ошибка обработки поста {item.url}: {e}")
-            
+                    error_count += 1
+                    logger.error(f"  ✗ Ошибка обработки поста {item.url}: {e}")
+
             # Обновляем время последнего парсинга
-            source.last_parsed = datetime.utcnow()
+            source.last_parsed = datetime.now()
             await session.commit()
+
+            logger.info(f"=" * 60)
+            logger.info(f"Результаты обработки {source.name}:")
+            logger.info(f"  ✓ Новых постов: {new_count}")
+            logger.info(f"  ✗ Пропущено дубликатов: {duplicate_count}")
+            logger.info(f"  ✗ Ошибок: {error_count}")
+            logger.info(f"=" * 60)
             
-            logger.info(f"Обработано {processed_count} постов из {source.name}")
-            return processed_count
+            return new_count
     
     def _get_parser(self, source: Source):
         """Получение парсера для источника"""
@@ -116,18 +144,21 @@ class NewsProcessor:
         # Вычисляем хеш контента
         content_for_hash = f"{item.title}|{item.content}".encode('utf-8')
         content_hash = hashlib.sha256(content_for_hash).hexdigest()
-        
+
         # Проверяем, нет ли уже такого поста по URL или хешу
         result = await session.execute(
             select(Post).where(
-                (Post.original_url == item.url) | 
+                (Post.original_url == item.url) |
                 (Post.content_hash == content_hash)
             )
         )
-        if result.scalar_one_or_none():
-            logger.debug(f"Пост уже существует: {item.url} (hash: {content_hash[:8]}...)")
-            return
+        existing_post = result.scalar_one_or_none()
         
+        if existing_post:
+            logger.debug(f"  ✗ ПРОПУЩЕН (дубликат): {item.url[:80]}...")
+            logger.debug(f"    Существующий пост ID: {existing_post.id}")
+            return
+
         # Создаём пост
         post = Post(
             source_id=source.id,
@@ -139,10 +170,13 @@ class NewsProcessor:
             content_hash=content_hash,  # Сохраняем хеш для дедупликации
             status=PostStatus.PROCESSING.value
         )
-        
+
         session.add(post)
         await session.flush()  # Получаем ID
-        
+
+        title_preview = item.title[:50].replace('\n', ' ') if item.title else "Без заголовка"
+        logger.info(f"  ✓ Обработка поста ID={post.id}: {title_preview}...")
+
         # Адаптируем текст через AI
         if source.ai_enabled:
             adapted_content = await ai_service.adapt_text(
@@ -150,23 +184,23 @@ class NewsProcessor:
                 source.ai_prompt
             )
             adapted_title = await ai_service.generate_title(item.content)
-            
+
             post.adapted_content = adapted_content
             post.adapted_title = adapted_title
         else:
             post.adapted_content = item.content
             post.adapted_title = item.title
-        
+
         # Обрабатываем изображение
         if item.image_url:
             image_path = await self._process_image(item.image_url, post.id)
             if image_path:
                 post.processed_image_path = image_path
-        
+
         post.status = PostStatus.READY.value
         await session.commit()
-        
-        logger.info(f"Пост {post.id} готов к публикации")
+
+        logger.info(f"  ✓ Пост {post.id} готов к публикации")
     
     async def _process_image(
         self,
