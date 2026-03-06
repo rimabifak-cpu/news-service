@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     
     # AI Settings
     AI_API_KEY: Optional[str] = None
-    AI_API_URL: str = "https://api.openai.com/v1"
-    AI_MODEL: str = "gpt-4-turbo-preview"
+    AI_API_URL: str = "https://openrouter.ai/api/v1"
+    AI_MODEL: str = "openai/gpt-3.5-turbo"
     
     # Telegram
     TELEGRAM_BOT_TOKEN: Optional[str] = None
