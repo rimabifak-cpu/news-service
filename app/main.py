@@ -3,6 +3,7 @@ News Service - Главное приложение
 """
 import os
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +13,7 @@ from contextlib import asynccontextmanager
 from app.config import settings
 from app.database import init_db
 from app.api.routes import router as api_router
+from app.middleware import RequestTracingMiddleware, ErrorHandlingMiddleware
 
 
 @asynccontextmanager
@@ -47,6 +49,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Custom middleware
+app.add_middleware(ErrorHandlingMiddleware)
+app.add_middleware(RequestTracingMiddleware)
+
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -65,8 +71,23 @@ async def root(request: Request):
 
 @app.get("/health")
 async def health_check():
-    """Проверка здоровья"""
-    return {"status": "ok", "version": "1.0.0"}
+    """Проверка здоровья с проверкой БД"""
+    from sqlalchemy import text
+    from app.database import engine
+    
+    health_status = {"status": "ok", "version": "1.0.0", "checks": {}}
+    
+    # Check database
+    try:
+        async with engine.begin() as conn:
+            await conn.execute(text("SELECT 1"))
+        health_status["checks"]["database"] = "ok"
+    except Exception as e:
+        health_status["status"] = "degraded"
+        health_status["checks"]["database"] = f"error: {str(e)}"
+    
+    status_code = 200 if health_status["status"] == "ok" else 503
+    return JSONResponse(content=health_status, status_code=status_code)
 
 
 @app.get("/favicon.ico")
