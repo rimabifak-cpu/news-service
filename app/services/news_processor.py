@@ -1,7 +1,7 @@
 """
 Сервис обработки новостей
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +15,16 @@ from app.parsers.base import ParsedItem
 from app.services.ai_service import ai_service
 from app.services.image_service import image_service
 from app.config import settings
+
+
+def _to_naive_datetime(dt: Optional[datetime]) -> Optional[datetime]:
+    """Конвертировать timezone-aware datetime в naive (без timezone)"""
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        # Конвертируем в UTC и убираем tzinfo
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 class NewsProcessor:
@@ -125,7 +135,7 @@ class NewsProcessor:
             original_content=item.content,
             original_url=item.url,
             original_image_url=item.image_url,
-            original_published_at=item.published_at,
+            original_published_at=_to_naive_datetime(item.published_at),
             content_hash=content_hash,  # Сохраняем хеш для дедупликации
             status=PostStatus.PROCESSING.value
         )

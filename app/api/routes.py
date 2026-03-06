@@ -6,6 +6,7 @@ from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel
+from loguru import logger
 from datetime import datetime
 
 from app.database import get_db
@@ -193,13 +194,19 @@ async def parse_all_sources():
     from app.models.db_models import Source
     
     async with async_session_maker() as session:
-        result = await session.execute(select(Source).where(Source.is_active == True))
-        sources = result.scalars().all()
+        try:
+            result = await session.execute(select(Source).where(Source.is_active == True))
+            sources = result.scalars().all()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка получения источников: {str(e)}")
     
     total_count = 0
     for source in sources:
-        count = await news_processor.process_source(source.id)
-        total_count += count
+        try:
+            count = await news_processor.process_source(source.id)
+            total_count += count
+        except Exception as e:
+            logger.error(f"Ошибка при парсинге источника {source.name}: {e}")
     
     return {"message": f"Обработано {total_count} постов из {len(sources)} источников"}
 
