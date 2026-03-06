@@ -201,7 +201,7 @@ async def parse_all_sources():
         count = await news_processor.process_source(source.id)
         total_count += count
     
-    return {"message": f"Обработано {total_count} постов из {len(sources)} источников"}}
+    return {"message": f"Обработано {total_count} постов из {len(sources)} источников"}
 
 
 # === Посты ===
