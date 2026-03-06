@@ -7,6 +7,10 @@ RUN apt-get update && apt-get install -y \
     libpq-dev \
     gcc \
     libmagic1 \
+    libcairo2 \
+    libffi-dev \
+    libgdk-pixbuf2.0-0 \
+    libpango1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Копирование requirements

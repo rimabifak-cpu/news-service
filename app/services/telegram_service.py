@@ -23,32 +23,37 @@ class TelegramService:
     ) -> Optional[int]:
         """
         Публикация поста в Telegram канале
-        
+
         Args:
             text: Текст поста
             image_path: Путь к изображению (опционально)
             channel_id: ID канала (опционально)
-        
+
         Returns:
             message_id опубликованного сообщения или None
         """
         if not self.bot_token:
             logger.error("Telegram bot token не настроен")
             return None
-        
+
         channel_id = channel_id or self.channel_id
         if not channel_id:
             logger.error("Telegram channel ID не настроен")
             return None
-        
+
         import httpx
-        
+
         api_url = f"https://api.telegram.org/bot{self.bot_token}"
-        
+
         try:
+            # Проверяем изображение
+            image_exists = image_path and os.path.exists(image_path)
+            logger.info(f"Публикация: image_path={image_path}, exists={image_exists}")
+            
             async with httpx.AsyncClient(timeout=30.0) as client:
-                if image_path and os.path.exists(image_path):
+                if image_exists:
                     # Отправляем с фото
+                    logger.info(f"Отправка фото: {image_path}")
                     with open(image_path, 'rb') as photo:
                         files = {'photo': photo}
                         data = {
@@ -56,6 +61,7 @@ class TelegramService:
                             'caption': text,
                             'parse_mode': 'HTML'
                         }
+                        logger.info(f"Отправка в канал: {channel_id}")
                         response = await client.post(
                             f"{api_url}/sendPhoto",
                             files=files,
@@ -63,6 +69,7 @@ class TelegramService:
                         )
                 else:
                     # Отправляем только текст
+                    logger.info(f"Отправка текста в канал: {channel_id}")
                     data = {
                         'chat_id': channel_id,
                         'text': text,
@@ -72,6 +79,8 @@ class TelegramService:
                         f"{api_url}/sendMessage",
                         json=data
                     )
+
+                logger.info(f"Telegram response status: {response.status_code}")
                 
                 if response.status_code == 200:
                     result = response.json()
@@ -81,9 +90,9 @@ class TelegramService:
                 else:
                     logger.error(f"Telegram API error: {response.status_code} - {response.text}")
                     return None
-                    
+
         except Exception as e:
-            logger.error(f"Ошибка публикации в Telegram: {e}")
+            logger.error(f"Ошибка публикации в Telegram: {e}", exc_info=True)
             return None
     
     async def edit_post(

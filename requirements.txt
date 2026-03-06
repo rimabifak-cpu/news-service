@@ -21,6 +21,7 @@ feedparser==6.0.10
 
 # Image Processing
 pillow==10.2.0
+cairosvg==2.7.1
 
 # AI Integration
 openai==1.10.0
