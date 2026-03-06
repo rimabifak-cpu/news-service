@@ -197,39 +197,72 @@ class NewsProcessor:
             if image_path:
                 post.processed_image_path = image_path
 
-        # Если включена автопубликация — публикуем сразу
-        if source.auto_publish:
-            logger.info(f"  🚀 Автопубликация поста ID={post.id}...")
-            post.status = PostStatus.READY.value
-            await session.commit()
+        # Получаем канал из источника
+        channel = source.channel
+
+        # Адаптируем текст через AI с промтом канала или источника
+        if source.ai_enabled:
+            # Используем промт источника, если есть, иначе промт канала
+            ai_prompt = source.ai_prompt or (channel.ai_prompt if channel else None)
             
+            adapted_content = await ai_service.adapt_text(
+                item.content,
+                ai_prompt
+            )
+            adapted_title = await ai_service.generate_title(item.content)
+
+            post.adapted_content = adapted_content
+            post.adapted_title = adapted_title
+        else:
+            post.adapted_content = item.content
+            post.adapted_title = item.title
+
+        # Обрабатываем изображение
+        if item.image_url:
+            image_path = await self._process_image(item.image_url, post.id)
+            if image_path:
+                post.processed_image_path = image_path
+
+        # Если включена автопубликация — публикуем сразу
+        if source.auto_publish and channel:
+            logger.info(f"  🚀 Автопубликация поста ID={post.id} в канал {channel.name}...")
+            post.status = PostStatus.READY.value
+            post.channel_id = channel.id
+            await session.commit()
+
             # Публикуем в Telegram
             try:
                 from app.services.telegram_service import telegram_service
-                
+
                 title = post.adapted_title or post.original_title or "Без заголовка"
                 content = post.adapted_content or post.original_content or ""
                 original_url = post.original_url or ""
-                
+
                 text = f"<b>{title}</b>\n\n{content}\n\n<a href='{original_url}'>Источник</a>"
                 image_path = post.processed_image_path
-                
+
                 if image_path and not os.path.exists(image_path):
                     image_path = None
-                
-                message_id = await telegram_service.publish_post(text=text, image_path=image_path)
-                
+
+                # Публикуем с токеном канала
+                message_id = await telegram_service.publish_post(
+                    text=text,
+                    image_path=image_path,
+                    bot_token=channel.bot_token,
+                    channel_id=channel.channel_id
+                )
+
                 if message_id:
                     post.status = PostStatus.PUBLISHED.value
                     post.telegram_message_id = message_id
                     post.published_at = datetime.now()
                     await session.commit()
-                    logger.info(f"  ✅ Пост {post.id} автопубликован, message_id: {message_id}")
+                    logger.info(f"  ✅ Пост {post.id} автопубликован в {channel.channel_id}, message_id: {message_id}")
                 else:
                     post.status = PostStatus.READY.value  # Возвращаем в готовые если ошибка
                     await session.commit()
                     logger.warning(f"  ⚠️ Автопубликация поста {post.id} не удалась, возвращён в готовые")
-                    
+
             except Exception as e:
                 logger.error(f"  ❌ Ошибка автопубликации поста {post.id}: {e}")
                 post.status = PostStatus.READY.value  # Возвращаем в готовые если ошибка
@@ -237,6 +270,8 @@ class NewsProcessor:
         else:
             # Без автопубликации — оставляем в готовых
             post.status = PostStatus.READY.value
+            if channel:
+                post.channel_id = channel.id
             await session.commit()
             logger.info(f"  ✓ Пост {post.id} готов к публикации")
     

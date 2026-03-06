@@ -325,6 +325,19 @@ async def publish_post(
         logger.warning(f"Пост {post_id} не готов к публикации, статус: {post.status}")
         raise HTTPException(status_code=400, detail="Пост не готов к публикации")
 
+    # Получаем канал из поста или источника
+    channel = post.channel
+    if not channel:
+        # Если канал не указан в посте, получаем из источника
+        source_result = await db.execute(select(Source).where(Source.id == post.source_id))
+        source = source_result.scalar_one_or_none()
+        if source and source.channel:
+            channel = source.channel
+
+    if not channel:
+        logger.error("Канал не найден для поста")
+        raise HTTPException(status_code=500, detail="Канал не найден")
+
     # Формируем текст поста
     title = post.adapted_title or post.original_title or "Без заголовка"
     content = post.adapted_content or post.original_content or ""
@@ -332,15 +345,6 @@ async def publish_post(
 
     text = f"<b>{title}</b>\n\n{content}\n\n<a href='{original_url}'>Источник</a>"
     logger.info(f"Текст поста: {text[:200]}...")
-
-    # Проверяем настройки Telegram
-    if not settings.TELEGRAM_BOT_TOKEN:
-        logger.error("Telegram bot token не настроен")
-        raise HTTPException(status_code=500, detail="Telegram бот не настроен")
-
-    if not settings.TELEGRAM_CHANNEL_ID:
-        logger.error("Telegram channel ID не настроен")
-        raise HTTPException(status_code=500, detail="Telegram канал не настроен")
 
     # Проверяем путь к изображению
     image_path = post.processed_image_path
@@ -356,10 +360,12 @@ async def publish_post(
 
     # Публикуем
     try:
-        logger.info(f"Вызов telegram_service.publish_post")
+        logger.info(f"Вызов telegram_service.publish_post для канала {channel.name}")
         message_id = await telegram_service.publish_post(
             text=text,
-            image_path=image_path
+            image_path=image_path,
+            bot_token=channel.bot_token,
+            channel_id=channel.channel_id
         )
         logger.info(f"Результат публикации: message_id={message_id}")
     except Exception as e:
@@ -370,9 +376,10 @@ async def publish_post(
         post.status = PostStatus.PUBLISHED.value
         post.telegram_message_id = message_id
         post.published_at = datetime.now()
+        post.channel_id = channel.id
         await db.commit()
 
-        logger.info(f"Пост {post_id} успешно опубликован, message_id: {message_id}")
+        logger.info(f"Пост {post_id} успешно опубликован в {channel.channel_id}, message_id: {message_id}")
         return {"message": "Пост опубликован", "telegram_message_id": message_id}
     else:
         logger.error(f"Не удалось опубликовать пост {post_id} - telegram_service вернул None")

@@ -19,7 +19,8 @@ class TelegramService:
         self,
         text: str,
         image_path: Optional[str] = None,
-        channel_id: Optional[str] = None
+        channel_id: Optional[str] = None,
+        bot_token: Optional[str] = None
     ) -> Optional[int]:
         """
         Публикация поста в Telegram канале
@@ -27,23 +28,27 @@ class TelegramService:
         Args:
             text: Текст поста
             image_path: Путь к изображению (опционально)
-            channel_id: ID канала (опционально)
+            channel_id: ID канала (опционально, переопределяет настройку по умолчанию)
+            bot_token: Токен бота (опционально, переопределяет настройку по умолчанию)
 
         Returns:
             message_id опубликованного сообщения или None
         """
-        if not self.bot_token:
+        # Используем переданные значения или настройки по умолчанию
+        bot_token = bot_token or self.bot_token
+        channel_id = channel_id or self.channel_id
+        
+        if not bot_token:
             logger.error("Telegram bot token не настроен")
             return None
 
-        channel_id = channel_id or self.channel_id
         if not channel_id:
             logger.error("Telegram channel ID не настроен")
             return None
 
         import httpx
 
-        api_url = f"https://api.telegram.org/bot{self.bot_token}"
+        api_url = f"https://api.telegram.org/bot{bot_token}"
 
         try:
             # Проверяем изображение
