@@ -56,6 +56,10 @@ app.add_middleware(RequestTracingMiddleware)
 # Static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Uploads - для раздачи загруженных файлов
+uploads_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static", "uploads")
+app.mount("/uploads", StaticFiles(directory=uploads_dir), name="uploads")
+
 # Templates
 templates = Jinja2Templates(directory="templates")
 

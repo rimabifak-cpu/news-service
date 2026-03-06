@@ -1,6 +1,7 @@
 """
 API эндпоинты для управления источниками и постами
 """
+import os
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -253,13 +254,17 @@ async def publish_post(
     db: AsyncSession = Depends(get_db)
 ):
     """Опубликовать пост в Telegram"""
+    logger.info(f"Начало публикации поста {post_id}")
+    
     result = await db.execute(select(Post).where(Post.id == post_id))
     post = result.scalar_one_or_none()
     
     if not post:
+        logger.error(f"Пост {post_id} не найден")
         raise HTTPException(status_code=404, detail="Пост не найден")
     
     if post.status != PostStatus.READY.value:
+        logger.warning(f"Пост {post_id} не готов к публикации, статус: {post.status}")
         raise HTTPException(status_code=400, detail="Пост не готов к публикации")
     
     # Формируем текст поста
@@ -267,11 +272,30 @@ async def publish_post(
     text += post.adapted_content or post.original_content
     text += f"\n\n<a href='{post.original_url}'>Источник</a>"
     
+    # Проверяем настройки Telegram
+    if not settings.TELEGRAM_BOT_TOKEN:
+        logger.error("Telegram bot token не настроен")
+        raise HTTPException(status_code=500, detail="Telegram бот не настроен")
+    
+    if not settings.TELEGRAM_CHANNEL_ID:
+        logger.error("Telegram channel ID не настроен")
+        raise HTTPException(status_code=500, detail="Telegram канал не настроен")
+    
+    # Проверяем путь к изображению
+    image_path = post.processed_image_path
+    if image_path and not os.path.exists(image_path):
+        logger.warning(f"Изображение не найдено: {image_path}, публикуем без него")
+        image_path = None
+    
     # Публикуем
-    message_id = await telegram_service.publish_post(
-        text=text,
-        image_path=post.processed_image_path
-    )
+    try:
+        message_id = await telegram_service.publish_post(
+            text=text,
+            image_path=image_path
+        )
+    except Exception as e:
+        logger.error(f"Исключение при публикации: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка публикации: {str(e)}")
     
     if message_id:
         post.status = PostStatus.PUBLISHED.value
@@ -279,8 +303,10 @@ async def publish_post(
         post.published_at = datetime.utcnow()
         await db.commit()
         
+        logger.info(f"Пост {post_id} успешно опубликован, message_id: {message_id}")
         return {"message": "Пост опубликован", "telegram_message_id": message_id}
     else:
+        logger.error(f"Не удалось опубликовать пост {post_id}")
         raise HTTPException(status_code=500, detail="Ошибка публикации в Telegram")
 
 

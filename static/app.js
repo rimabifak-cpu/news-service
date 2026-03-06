@@ -116,7 +116,7 @@ function renderPostsList(posts) {
             <div class="row">
                 ${post.processed_image_path ? `
                     <div class="col-md-3">
-                        <img src="${post.processed_image_path}" alt="Post image">
+                        <img src="${post.processed_image_path.replace('/app/static/uploads', '/uploads')}" alt="Post image">
                     </div>
                 ` : ''}
                 <div class="${post.processed_image_path ? 'col-md-9' : 'col-md-12'}">
