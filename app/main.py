@@ -69,6 +69,13 @@ async def health_check():
     return {"status": "ok", "version": "1.0.0"}
 
 
+@app.get("/favicon.ico")
+async def favicon():
+    """Favicon"""
+    from fastapi.responses import Response
+    return Response(status_code=204)
+
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(
