@@ -209,11 +209,11 @@ async function addSource() {
         source_type: document.getElementById('source-type').value,
         ai_prompt: document.getElementById('source-ai-prompt').value,
         ai_enabled: document.getElementById('source-ai-enabled').checked,
-        auto_publish: document.getElementById('source-auto-publish').checked,
-        selector_title: document.getElementById('source-selector-title').value,
-        selector_content: document.getElementById('source-selector-content').value,
-        selector_image: document.getElementById('source-selector-image').value,
-        selector_date: document.getElementById('source-selector-date').value,
+        auto_publish: document.getElementById('source-auto-publish')?.checked || false,
+        selector_title: document.getElementById('source-selector-title')?.value || '',
+        selector_content: document.getElementById('source-selector-content')?.value || '',
+        selector_image: document.getElementById('source-selector-image')?.value || '',
+        selector_date: document.getElementById('source-selector-date')?.value || '',
     };
 
     try {
@@ -251,7 +251,13 @@ async function editSource(sourceId) {
         document.getElementById('source-type').value = source.source_type;
         document.getElementById('source-ai-prompt').value = source.ai_prompt || '';
         document.getElementById('source-ai-enabled').checked = source.ai_enabled;
-        document.getElementById('source-auto-publish').checked = source.auto_publish;
+        
+        // Автопубликация - проверяем существование элемента
+        const autoPublishCheckbox = document.getElementById('source-auto-publish');
+        if (autoPublishCheckbox) {
+            autoPublishCheckbox.checked = source.auto_publish || false;
+        }
+        
         document.getElementById('source-selector-title').value = source.selector_title || '';
         document.getElementById('source-selector-content').value = source.selector_content || '';
         document.getElementById('source-selector-image').value = source.selector_image || '';
@@ -277,11 +283,11 @@ async function updateSource(sourceId) {
         source_type: document.getElementById('source-type').value,
         ai_prompt: document.getElementById('source-ai-prompt').value,
         ai_enabled: document.getElementById('source-ai-enabled').checked,
-        auto_publish: document.getElementById('source-auto-publish').checked,
-        selector_title: document.getElementById('source-selector-title').value,
-        selector_content: document.getElementById('source-selector-content').value,
-        selector_image: document.getElementById('source-selector-image').value,
-        selector_date: document.getElementById('source-selector-date').value,
+        auto_publish: document.getElementById('source-auto-publish')?.checked || false,
+        selector_title: document.getElementById('source-selector-title')?.value || '',
+        selector_content: document.getElementById('source-selector-content')?.value || '',
+        selector_image: document.getElementById('source-selector-image')?.value || '',
+        selector_date: document.getElementById('source-selector-date')?.value || '',
     };
 
     try {
