@@ -18,6 +18,7 @@ document.querySelectorAll('.sidebar-menu a').forEach(link => {
         
         if (page === 'dashboard') loadDashboard();
         if (page === 'posts') loadPosts('all');
+        if (page === 'channels') loadChannels();
         if (page === 'sources') loadSources();
         if (page === 'settings') loadSettings();
     });
@@ -38,6 +39,160 @@ async function loadDashboard() {
         renderRecentPosts(posts);
     } catch (error) {
         console.error('Error loading dashboard:', error);
+    }
+}
+
+// Load Channels
+async function loadChannels() {
+    try {
+        const channels = await fetch(`${API_BASE}/api/channels`).then(r => r.json());
+        renderChannelsList(channels);
+    } catch (error) {
+        console.error('Error loading channels:', error);
+    }
+}
+
+function renderChannelsList(channels) {
+    const container = document.getElementById('channels-list');
+    if (!channels || channels.length === 0) {
+        container.innerHTML = '<tr><td colspan="7" class="text-muted">Нет каналов</td></tr>';
+        return;
+    }
+
+    container.innerHTML = channels.map(channel => `
+        <tr>
+            <td><strong>${escapeHtml(channel.name)}</strong></td>
+            <td><a href="https://t.me/${channel.channel_id.replace('@', '')}" target="_blank">${escapeHtml(channel.channel_id)}</a></td>
+            <td><code>${escapeHtml(channel.bot_token)}</code></td>
+            <td><small class="text-muted">${channel.ai_prompt ? escapeHtml(channel.ai_prompt.substring(0, 40)) + '...' : '—'}</small></td>
+            <td><span class="badge bg-info">${channel.sources_count || 0}</span></td>
+            <td>
+                <span class="badge ${channel.is_active ? 'bg-success' : 'bg-secondary'}">
+                    ${channel.is_active ? 'Активен' : 'Неактивен'}
+                </span>
+            </td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary me-1" onclick="editChannel(${channel.id})" title="Редактировать">
+                    <i class="bi bi-pencil"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-danger" onclick="deleteChannel(${channel.id})" title="Удалить">
+                    <i class="bi bi-trash"></i>
+                </button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+async function showAddChannelModal() {
+    document.getElementById('add-channel-form').reset();
+    document.querySelector('#addChannelModal .modal-title').textContent = 'Добавить канал';
+    document.querySelector('#addChannelModal .btn-primary').textContent = 'Добавить';
+    document.querySelector('#addChannelModal .btn-primary').onclick = addChannel;
+    new bootstrap.Modal(document.getElementById('addChannelModal')).show();
+}
+
+async function addChannel() {
+    const data = {
+        name: document.getElementById('channel-name').value,
+        bot_token: document.getElementById('channel-bot-token').value,
+        channel_id: document.getElementById('channel-channel-id').value,
+        ai_prompt: document.getElementById('channel-ai-prompt').value,
+        logo_position: document.getElementById('channel-logo-position').value,
+        logo_opacity: parseFloat(document.getElementById('channel-logo-opacity').value),
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/api/channels`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('addChannelModal')).hide();
+            loadChannels();
+            alert('Канал добавлен');
+        } else {
+            const error = await response.json();
+            alert(`Ошибка: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error adding channel:', error);
+        alert('Ошибка при добавлении канала');
+    }
+}
+
+async function editChannel(channelId) {
+    try {
+        const channel = await fetch(`${API_BASE}/api/channels/${channelId}`).then(r => r.json());
+        
+        document.getElementById('channel-name').value = channel.name;
+        document.getElementById('channel-bot-token').value = channel.bot_token;
+        document.getElementById('channel-channel-id').value = channel.channel_id;
+        document.getElementById('channel-ai-prompt').value = channel.ai_prompt || '';
+        document.getElementById('channel-logo-position').value = channel.logo_position;
+        document.getElementById('channel-logo-opacity').value = channel.logo_opacity;
+        
+        document.querySelector('#addChannelModal .modal-title').textContent = 'Редактировать канал';
+        document.querySelector('#addChannelModal .btn-primary').textContent = 'Сохранить';
+        document.querySelector('#addChannelModal .btn-primary').onclick = () => updateChannel(channelId);
+        
+        new bootstrap.Modal(document.getElementById('addChannelModal')).show();
+    } catch (error) {
+        console.error('Error loading channel:', error);
+        alert('Ошибка при загрузке канала');
+    }
+}
+
+async function updateChannel(channelId) {
+    const data = {
+        name: document.getElementById('channel-name').value,
+        bot_token: document.getElementById('channel-bot-token').value,
+        channel_id: document.getElementById('channel-channel-id').value,
+        ai_prompt: document.getElementById('channel-ai-prompt').value,
+        logo_position: document.getElementById('channel-logo-position').value,
+        logo_opacity: parseFloat(document.getElementById('channel-logo-opacity').value),
+    };
+
+    try {
+        const response = await fetch(`${API_BASE}/api/channels/${channelId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('addChannelModal')).hide();
+            loadChannels();
+            alert('Канал обновлён');
+        } else {
+            const error = await response.json();
+            alert(`Ошибка: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error updating channel:', error);
+        alert('Ошибка при обновлении канала');
+    }
+}
+
+async function deleteChannel(channelId) {
+    if (!confirm('Удалить этот канал? Источники должны быть удалены заранее.')) return;
+
+    try {
+        const response = await fetch(`${API_BASE}/api/channels/${channelId}`, {
+            method: 'DELETE'
+        });
+
+        if (response.ok) {
+            loadChannels();
+            alert('Канал удалён');
+        } else {
+            const error = await response.json();
+            alert(`Ошибка: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error deleting channel:', error);
+        alert('Ошибка при удалении канала');
     }
 }
 
@@ -199,7 +354,28 @@ function showAddSourceModal() {
     document.querySelector('#addSourceModal .modal-title').textContent = 'Добавить источник';
     document.querySelector('#addSourceModal .btn-primary').textContent = 'Добавить';
     document.querySelector('#addSourceModal .btn-primary').onclick = addSource;
+    
+    // Загружаем список каналов
+    loadChannelsForSelect();
+    
     new bootstrap.Modal(document.getElementById('addSourceModal')).show();
+}
+
+async function loadChannelsForSelect() {
+    try {
+        const channels = await fetch(`${API_BASE}/api/channels`).then(r => r.json());
+        const select = document.getElementById('source-channel-id');
+        select.innerHTML = '<option value="">Выберите канал...</option>';
+        
+        channels.forEach(channel => {
+            const option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = channel.name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading channels for select:', error);
+    }
 }
 
 async function addSource() {
@@ -207,6 +383,7 @@ async function addSource() {
         name: document.getElementById('source-name').value,
         url: document.getElementById('source-url').value,
         source_type: document.getElementById('source-type').value,
+        channel_id: parseInt(document.getElementById('source-channel-id').value),
         ai_prompt: document.getElementById('source-ai-prompt').value,
         ai_enabled: document.getElementById('source-ai-enabled').checked,
         auto_publish: document.getElementById('source-auto-publish')?.checked || false,
@@ -215,6 +392,11 @@ async function addSource() {
         selector_image: document.getElementById('source-selector-image')?.value || '',
         selector_date: document.getElementById('source-selector-date')?.value || '',
     };
+
+    if (!data.channel_id) {
+        alert('Выберите канал');
+        return;
+    }
 
     try {
         const response = await fetch(`${API_BASE}/api/sources`, {
@@ -245,10 +427,14 @@ async function editSource(sourceId) {
         // Получаем данные источника
         const source = await fetch(`${API_BASE}/api/sources/${sourceId}`).then(r => r.json());
         
+        // Загружаем список каналов
+        await loadChannelsForSelect();
+        
         // Заполняем форму
         document.getElementById('source-name').value = source.name;
         document.getElementById('source-url').value = source.url;
         document.getElementById('source-type').value = source.source_type;
+        document.getElementById('source-channel-id').value = source.channel_id;
         document.getElementById('source-ai-prompt').value = source.ai_prompt || '';
         document.getElementById('source-ai-enabled').checked = source.ai_enabled;
         
@@ -281,6 +467,7 @@ async function updateSource(sourceId) {
         name: document.getElementById('source-name').value,
         url: document.getElementById('source-url').value,
         source_type: document.getElementById('source-type').value,
+        channel_id: parseInt(document.getElementById('source-channel-id').value),
         ai_prompt: document.getElementById('source-ai-prompt').value,
         ai_enabled: document.getElementById('source-ai-enabled').checked,
         auto_publish: document.getElementById('source-auto-publish')?.checked || false,
@@ -289,6 +476,11 @@ async function updateSource(sourceId) {
         selector_image: document.getElementById('source-selector-image')?.value || '',
         selector_date: document.getElementById('source-selector-date')?.value || '',
     };
+
+    if (!data.channel_id) {
+        alert('Выберите канал');
+        return;
+    }
 
     try {
         const response = await fetch(`${API_BASE}/api/sources/${sourceId}`, {
