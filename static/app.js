@@ -246,16 +246,55 @@ function renderRecentPosts(posts) {
 }
 
 // Load Posts
+let currentStatusFilter = 'all';
+
 async function loadPosts(statusFilter = 'all') {
-    const url = statusFilter === 'all' 
-        ? `${API_BASE}/api/posts?limit=50`
-        : `${API_BASE}/api/posts?status_filter=${statusFilter}&limit=50`;
+    currentStatusFilter = statusFilter;
     
+    // Загружаем каналы для фильтра
+    await loadChannelsForFilter();
+    
+    const channelFilter = document.getElementById('channel-filter')?.value || '';
+    const adFilter = document.getElementById('ad-filter')?.value || '';
+    
+    // Строим URL с параметрами
+    let url = `${API_BASE}/api/posts?limit=50`;
+    
+    if (statusFilter !== 'all') {
+        url += `&status_filter=${statusFilter}`;
+    }
+    
+    if (channelFilter) {
+        url += `&channel_id=${channelFilter}`;
+    }
+    
+    if (adFilter !== '') {
+        url += `&is_advertisement=${adFilter}`;
+    }
+
     try {
         const posts = await fetch(url).then(r => r.json());
         renderPostsList(posts);
     } catch (error) {
         console.error('Error loading posts:', error);
+    }
+}
+
+async function loadChannelsForFilter() {
+    const select = document.getElementById('channel-filter');
+    if (!select || select.options.length > 1) return;  // Уже загружено
+    
+    try {
+        const channels = await fetch(`${API_BASE}/api/channels`).then(r => r.json());
+        
+        channels.forEach(channel => {
+            const option = document.createElement('option');
+            option.value = channel.id;
+            option.textContent = channel.name;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error loading channels for filter:', error);
     }
 }
 
@@ -265,9 +304,9 @@ function renderPostsList(posts) {
         container.innerHTML = '<p class="text-muted">Нет постов</p>';
         return;
     }
-    
+
     container.innerHTML = posts.map(post => `
-        <div class="post-card">
+        <div class="post-card" style="border-left: ${post.is_advertisement ? '4px solid #ffc107' : '4px solid transparent'}">
             <div class="row">
                 ${post.processed_image_path ? `
                     <div class="col-md-3">
@@ -276,7 +315,10 @@ function renderPostsList(posts) {
                 ` : ''}
                 <div class="${post.processed_image_path ? 'col-md-9' : 'col-md-12'}">
                     <div class="d-flex justify-content-between align-items-start mb-2">
-                        <div class="post-title">${escapeHtml(post.adapted_title || post.original_title)}</div>
+                        <div class="post-title">
+                            ${escapeHtml(post.adapted_title || post.original_title)}
+                            ${post.is_advertisement ? '<span class="badge bg-warning text-dark ms-2">#реклама</span>' : ''}
+                        </div>
                         <span class="status-badge status-${post.status}">${post.status}</span>
                     </div>
                     <p class="text-muted small mb-2">
@@ -290,9 +332,15 @@ function renderPostsList(posts) {
                         <button class="btn btn-reject btn-sm" onclick="rejectPost(${post.id})">
                             <i class="bi bi-x-lg"></i> Отклонить
                         </button>
+                        <button class="btn btn-sm ${post.is_advertisement ? 'btn-outline-warning' : 'btn-outline-secondary'} ms-2" onclick="toggleAd(${post.id}, ${post.is_advertisement})">
+                            <i class="bi bi-tag"></i> ${post.is_advertisement ? 'Не реклама' : 'Реклама'}
+                        </button>
                     ` : ''}
                     ${post.status === 'published' ? `
                         <span class="text-success"><i class="bi bi-check-circle"></i> Опубликовано</span>
+                        <button class="btn btn-sm ${post.is_advertisement ? 'btn-outline-warning' : 'btn-outline-secondary'} ms-2" onclick="toggleAd(${post.id}, ${post.is_advertisement})">
+                            <i class="bi bi-tag"></i> ${post.is_advertisement ? 'Не реклама' : 'Реклама'}
+                        </button>
                     ` : ''}
                 </div>
             </div>
@@ -359,6 +407,26 @@ function showAddSourceModal() {
     loadChannelsForSelect();
     
     new bootstrap.Modal(document.getElementById('addSourceModal')).show();
+}
+
+async function toggleAd(postId, currentIsAd) {
+    try {
+        const response = await fetch(`${API_BASE}/api/posts/${postId}/toggle-ad`, {
+            method: 'POST'
+        });
+
+        if (response.ok) {
+            const result = await response.json();
+            alert(`Пометка обновлена: ${result.is_advertisement ? 'Реклама' : 'Не реклама'}`);
+            loadPosts(currentStatusFilter);
+        } else {
+            const error = await response.json();
+            alert(`Ошибка: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error toggling ad:', error);
+        alert('Ошибка при обновлении пометки');
+    }
 }
 
 async function loadChannelsForSelect() {

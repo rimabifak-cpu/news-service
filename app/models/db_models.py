@@ -112,6 +112,9 @@ class Post(Base):
     status = Column(String(50), default=PostStatus.PENDING.value)
     telegram_message_id = Column(Integer)
     published_at = Column(DateTime)
+    
+    # Рекламная пометка
+    is_advertisement = Column(Boolean, default=False)  # Пометка #реклама
 
     # Метаданные
     created_at = Column(DateTime, default=datetime.utcnow)

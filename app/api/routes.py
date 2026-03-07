@@ -67,10 +67,12 @@ class SourceResponse(BaseModel):
 class PostResponse(BaseModel):
     id: int
     source_id: int
+    channel_id: Optional[int]
     original_title: str
     adapted_title: Optional[str]
     adapted_content: Optional[str]
     status: str
+    is_advertisement: bool
     processed_image_path: Optional[str]
     created_at: datetime
 
@@ -277,16 +279,24 @@ async def get_posts(
     skip: int = 0,
     limit: int = 50,
     status_filter: Optional[str] = None,
+    channel_id: Optional[int] = None,  # Фильтр по каналу
+    is_advertisement: Optional[bool] = None,  # Фильтр реклама/не реклама
     db: AsyncSession = Depends(get_db)
 ):
     """Получить список постов"""
     query = select(Post).order_by(Post.created_at.desc())
-    
+
     if status_filter:
         query = query.where(Post.status == status_filter)
     
-    query = query.offset(skip).limit(limit)
+    if channel_id:
+        query = query.where(Post.channel_id == channel_id)
     
+    if is_advertisement is not None:
+        query = query.where(Post.is_advertisement == is_advertisement)
+
+    query = query.offset(skip).limit(limit)
+
     result = await db.execute(query)
     return result.scalars().all()
 
@@ -394,14 +404,35 @@ async def reject_post(
     """Отклонить пост"""
     result = await db.execute(select(Post).where(Post.id == post_id))
     post = result.scalar_one_or_none()
-    
+
     if not post:
         raise HTTPException(status_code=404, detail="Пост не найден")
-    
+
     post.status = PostStatus.REJECTED.value
     await db.commit()
-    
+
     return {"message": "Пост отклонён"}
+
+
+@router.post("/posts/{post_id}/toggle-ad", response_model=dict)
+async def toggle_advertisement(
+    post_id: int,
+    db: AsyncSession = Depends(get_db)
+):
+    """Переключить пометку 'Реклама'"""
+    result = await db.execute(select(Post).where(Post.id == post_id))
+    post = result.scalar_one_or_none()
+
+    if not post:
+        raise HTTPException(status_code=404, detail="Пост не найден")
+
+    post.is_advertisement = not post.is_advertisement
+    await db.commit()
+
+    return {
+        "message": "Пометка обновлена",
+        "is_advertisement": post.is_advertisement
+    }
 
 
 @router.get("/stats", response_model=dict)

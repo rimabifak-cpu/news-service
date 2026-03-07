@@ -268,6 +268,23 @@
                 </div>
             </div>
             
+            <div class="row mb-3">
+                <div class="col-md-3">
+                    <label class="form-label">Фильтр по каналу</label>
+                    <select class="form-select" id="channel-filter" onchange="loadPosts(currentStatusFilter)">
+                        <option value="">Все каналы</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Реклама</label>
+                    <select class="form-select" id="ad-filter" onchange="loadPosts(currentStatusFilter)">
+                        <option value="">Все</option>
+                        <option value="false">Не реклама</option>
+                        <option value="true">Реклама #реклама</option>
+                    </select>
+                </div>
+            </div>
+
             <div class="content-card">
                 <div id="posts-list"></div>
             </div>

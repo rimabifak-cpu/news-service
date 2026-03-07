@@ -177,6 +177,17 @@ class NewsProcessor:
         title_preview = item.title[:50].replace('\n', ' ') if item.title else "Без заголовка"
         logger.info(f"  ✓ Обработка поста ID={post.id}: {title_preview}...")
 
+        # Проверяем на рекламу (хэштеги #реклама, #ad, #sponsored)
+        content_lower = (item.content or "").lower()
+        title_lower = (item.title or "").lower()
+        
+        ad_markers = ['#реклама', '#ad', '#sponsored', '#партнёр', '#партнер', 'реклама:', 'на правах рекламы']
+        is_ad = any(marker in content_lower or marker in title_lower for marker in ad_markers)
+        
+        if is_ad:
+            post.is_advertisement = True
+            logger.info(f"  ⚠️ Обнаружена реклама в посте ID={post.id}")
+
         # Адаптируем текст через AI
         if source.ai_enabled:
             adapted_content = await ai_service.adapt_text(
