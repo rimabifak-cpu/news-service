@@ -201,6 +201,9 @@ class NewsProcessor:
             await session.commit()
             return
 
+        # Сразу устанавливаем channel_id из источника
+        post.channel_id = channel.id
+
         # Адаптируем текст через AI с промтом канала или источника
         if source.ai_enabled:
             # Используем промт источника, если есть, иначе промт канала
@@ -236,7 +239,6 @@ class NewsProcessor:
         if source.auto_publish:
             logger.info(f"  🚀 Автопубликация поста ID={post.id} в канал {channel.name}...")
             post.status = PostStatus.READY.value
-            post.channel_id = channel.id
             await session.commit()
 
             # Публикуем в Telegram
@@ -278,10 +280,10 @@ class NewsProcessor:
                 await session.commit()
         else:
             # Без автопубликации — устанавливаем статус READY
+            # channel_id уже установлен выше
             post.status = PostStatus.READY.value
-            post.channel_id = channel.id
             await session.commit()
-            logger.info(f"  ✓ Пост {post.id} готов к публикации (статус: READY)")
+            logger.info(f"  ✓ Пост {post.id} готов к публикации (статус: READY, канал: {channel.name})")
     
     async def _process_image(
         self,
