@@ -172,7 +172,7 @@ class NewsProcessor:
         )
 
         session.add(post)
-        await session.flush()  # Получаем ID
+        await session.commit()  # Сохраняем пост сразу
 
         title_preview = item.title[:50].replace('\n', ' ') if item.title else "Без заголовка"
         logger.info(f"  ✓ Обработка поста ID={post.id}: {title_preview}...")

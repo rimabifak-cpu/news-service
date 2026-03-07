@@ -236,15 +236,29 @@ async def parse_source(
     db: AsyncSession = Depends(get_db)
 ):
     """Запустить парсинг источника"""
-    result = await db.execute(select(Source).where(Source.id == source_id))
-    source = result.scalar_one_or_none()
+    try:
+        result = await db.execute(select(Source).where(Source.id == source_id))
+        source = result.scalar_one_or_none()
+
+        if not source:
+            raise HTTPException(status_code=404, detail="Источник не найден")
+
+        logger.info(f"Запуск парсинга источника {source_id}: {source.name} ({source.url})")
+        
+        count = await news_processor.process_source(source_id)
+        
+        logger.info(f"Парсинг завершён: обработано {count} постов")
+
+        return {"message": f"Обработано {count} постов"}
     
-    if not source:
-        raise HTTPException(status_code=404, detail="Источник не найден")
-    
-    count = await news_processor.process_source(source_id)
-    
-    return {"message": f"Обработано {count} постов"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Ошибка при парсинге источника {source_id}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Ошибка парсинга: {str(e)}"
+        )
 
 
 @router.post("/parse-all")
