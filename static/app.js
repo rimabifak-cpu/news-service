@@ -45,10 +45,28 @@ async function loadDashboard() {
 // Load Channels
 async function loadChannels() {
     try {
-        const channels = await fetch(`${API_BASE}/api/channels`).then(r => r.json());
+        const response = await fetch(`${API_BASE}/api/channels`);
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                document.getElementById('channels-list').innerHTML = `
+                    <tr><td colspan="7" class="text-muted">
+                        ⚠️ API каналов недоступно. Обновите сервер:<br>
+                        <code>git pull && docker-compose exec news_service python migrate_multichannel.py</code>
+                    </td></tr>
+                `;
+                return;
+            }
+            throw new Error(`HTTP ${response.status}`);
+        }
+        
+        const channels = await response.json();
         renderChannelsList(channels);
     } catch (error) {
         console.error('Error loading channels:', error);
+        document.getElementById('channels-list').innerHTML = `
+            <tr><td colspan="7" class="text-danger">Ошибка загрузки: ${error.message}</td></tr>
+        `;
     }
 }
 
@@ -285,7 +303,19 @@ async function loadChannelsForFilter() {
     if (!select || select.options.length > 1) return;  // Уже загружено
     
     try {
-        const channels = await fetch(`${API_BASE}/api/channels`).then(r => r.json());
+        const response = await fetch(`${API_BASE}/api/channels`);
+        
+        if (!response.ok) {
+            console.warn('API /api/channels недоступен (404). Возможно, сервер не обновлён.');
+            return;
+        }
+        
+        const channels = await response.json();
+        
+        if (!Array.isArray(channels)) {
+            console.error('Ожидался массив каналов, получено:', channels);
+            return;
+        }
         
         channels.forEach(channel => {
             const option = document.createElement('option');
