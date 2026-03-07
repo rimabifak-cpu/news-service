@@ -57,6 +57,8 @@ class SourceResponse(BaseModel):
     channel_id: int
     is_active: bool
     auto_publish: bool
+    ai_enabled: bool
+    ai_prompt: Optional[str]
     last_parsed: Optional[datetime]
     created_at: datetime
 
