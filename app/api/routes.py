@@ -410,7 +410,8 @@ async def publish_post(
     if message_id:
         post.status = PostStatus.PUBLISHED.value
         post.telegram_message_id = message_id
-        post.published_at = datetime.now(timezone.utc) + timedelta(hours=3)  # Moscow time
+        # Moscow time (UTC+3) as naive datetime
+        post.published_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=3)
         post.channel_id = channel.id
         await db.commit()
 

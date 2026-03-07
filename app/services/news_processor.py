@@ -95,7 +95,7 @@ class NewsProcessor:
                     logger.error(f"  ✗ Ошибка обработки поста {item.url}: {e}")
 
             # Обновляем время последнего парсинга
-            source.last_parsed = datetime.now(timezone.utc) + timedelta(hours=3)  # Moscow time
+            source.last_parsed = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=3)  # Moscow time
             await session.commit()
 
             logger.info(f"=" * 60)
@@ -246,7 +246,7 @@ class NewsProcessor:
                 if message_id:
                     post.status = PostStatus.PUBLISHED.value
                     post.telegram_message_id = message_id
-                    post.published_at = datetime.now(timezone.utc) + timedelta(hours=3)  # Moscow time
+                    post.published_at = datetime.now(timezone.utc).replace(tzinfo=None) + timedelta(hours=3)  # Moscow time
                     await session.commit()
                     logger.info(f"  ✅ Пост {post.id} автопубликован в {channel.channel_id}, message_id: {message_id}")
                 else:
