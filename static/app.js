@@ -336,12 +336,7 @@ function renderPostsList(posts) {
         return;
     }
 
-    console.log('Posts:', posts); // Отладка
-
-    container.innerHTML = posts.map(post => {
-        console.log(`Post ${post.id}: channel_id=${post.channel_id}, channel_name=${post.channel_name}`); // Отладка
-        
-        return `
+    container.innerHTML = posts.map(post => `
         <div class="post-card" style="border-left: ${post.is_advertisement ? '4px solid #ffc107' : '4px solid transparent'}">
             <div class="row">
                 ${post.processed_image_path ? `
@@ -360,11 +355,9 @@ function renderPostsList(posts) {
                     <p class="text-muted small mb-2">
                         <i class="bi bi-clock"></i> ${new Date(post.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </p>
-                    ${post.channel_id ? `
                     <p class="text-muted small mb-2">
-                        <i class="bi bi-broadcast"></i> Канал публикации: <strong>${escapeHtml(post.channel_name) || 'Канал #' + post.channel_id}</strong>
+                        <i class="bi bi-broadcast"></i> Канал публикации: <strong>${post.channel_name ? escapeHtml(post.channel_name) : 'Не указан'}</strong>
                     </p>
-                    ` : '<p class="text-warning small mb-2"><i class="bi bi-exclamation-triangle"></i> Канал не указан</p>'}
                     <div class="post-content mb-3">${escapeHtml(post.adapted_content || post.original_content || '')}</div>
                     ${post.status === 'ready' ? `
                         <button class="btn btn-publish btn-sm" onclick="publishPost(${post.id})">
@@ -386,8 +379,7 @@ function renderPostsList(posts) {
                 </div>
             </div>
         </div>
-        `;
-    }).join('');
+    `).join('');
 }
 
 // Load Sources

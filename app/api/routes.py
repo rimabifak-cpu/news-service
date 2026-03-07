@@ -303,8 +303,12 @@ async def get_posts(
 ):
     """Получить список постов"""
     from sqlalchemy.orm import joinedload
-    
-    query = select(Post).order_by(Post.created_at.desc())
+    from app.models.db_models import Channel
+
+    # Загружаем посты с каналами через join
+    query = select(Post).outerjoin(Channel, Post.channel_id == Channel.id).options(
+        joinedload(Post.channel)
+    ).order_by(Post.created_at.desc())
 
     if status_filter:
         query = query.where(Post.status == status_filter)
@@ -318,8 +322,8 @@ async def get_posts(
     query = query.offset(skip).limit(limit)
 
     result = await db.execute(query)
-    posts = result.scalars().all()
-    
+    posts = result.scalars().unique().all()
+
     # Добавляем названия каналов
     posts_with_channels = []
     for post in posts:
@@ -327,7 +331,7 @@ async def get_posts(
             "id": post.id,
             "source_id": post.source_id,
             "channel_id": post.channel_id,
-            "channel_name": None,
+            "channel_name": post.channel.name if post.channel else None,
             "original_title": post.original_title,
             "adapted_title": post.adapted_title,
             "adapted_content": post.adapted_content,
@@ -336,16 +340,8 @@ async def get_posts(
             "processed_image_path": post.processed_image_path,
             "created_at": post.created_at,
         }
-        
-        # Получаем название канала
-        if post.channel_id:
-            channel_result = await db.execute(select(Channel).where(Channel.id == post.channel_id))
-            channel = channel_result.scalar_one_or_none()
-            if channel:
-                post_dict["channel_name"] = channel.name
-        
         posts_with_channels.append(post_dict)
-    
+
     return posts_with_channels
 
 
