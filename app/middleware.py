@@ -1,83 +1,127 @@
 """
-Middleware for request tracking and error handling
+Middleware для детального логирования и трассировки запросов
 """
+import time
 import uuid
-import json
-from datetime import datetime
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
+from typing import Callable
+from fastapi import Request, Response
 from loguru import logger
+from starlette.middleware.base import BaseHTTPMiddleware
 
 
 class RequestTracingMiddleware(BaseHTTPMiddleware):
-    """Middleware for request ID tracking"""
-    
-    async def dispatch(self, request: Request, call_next):
-        # Generate request_id
+    """Middleware для трассировки запросов с request_id"""
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # Генерируем request_id для каждого запроса
         request_id = str(uuid.uuid4())
+        
+        # Добавляем request_id в контекст логов
         request.state.request_id = request_id
         
-        # Log request start
-        log_data = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "level": "INFO",
-            "module": "request",
-            "request_id": request_id,
-            "method": request.method,
-            "path": request.url.path,
-            "client_ip": request.client.host if request.client else None,
-            "message": "Request started"
-        }
-        logger.info(json.dumps(log_data))
+        # Извлекаем user_id из заголовков (если есть)
+        user_id = request.headers.get("X-User-ID", "anonymous")
         
-        # Process request
-        response = await call_next(request)
+        # Логируем начало запроса
+        start_time = time.time()
+        logger.info(
+            "REQUEST_START",
+            extra={
+                "request_id": request_id,
+                "user_id": user_id,
+                "method": request.method,
+                "path": request.url.path,
+                "query_params": dict(request.query_params),
+                "client_ip": request.client.host if request.client else "unknown",
+            }
+        )
         
-        # Log request end
-        log_data.update({
-            "level": "INFO",
-            "status_code": response.status_code,
-            "message": "Request completed"
-        })
-        logger.info(json.dumps(log_data))
-        
-        # Add request_id to response headers
-        response.headers["X-Request-ID"] = request_id
-        
-        return response
+        try:
+            # Выполняем запрос
+            response = await call_next(request)
+            
+            # Логируем завершение запроса
+            duration = time.time() - start_time
+            logger.info(
+                "REQUEST_END",
+                extra={
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "duration_ms": round(duration * 1000, 2),
+                }
+            )
+            
+            # Добавляем request_id в заголовки ответа
+            response.headers["X-Request-ID"] = request_id
+            
+            # Логирование медленных запросов
+            if duration > 2.0:
+                logger.warning(
+                    "SLOW_REQUEST",
+                    extra={
+                        "request_id": request_id,
+                        "user_id": user_id,
+                        "method": request.method,
+                        "path": request.url.path,
+                        "duration_ms": round(duration * 1000, 2),
+                        "threshold_ms": 2000,
+                    }
+                )
+            
+            return response
+            
+        except Exception as e:
+            # Логируем ошибку
+            duration = time.time() - start_time
+            logger.error(
+                "REQUEST_ERROR",
+                extra={
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "duration_ms": round(duration * 1000, 2),
+                },
+                exc_info=True
+            )
+            raise
 
 
 class ErrorHandlingMiddleware(BaseHTTPMiddleware):
-    """Middleware for global error handling"""
-    
-    async def dispatch(self, request: Request, call_next):
+    """Глобальный обработчик ошибок"""
+
+    async def dispatch(self, request: Request, call_next: Callable) -> Response:
         try:
             return await call_next(request)
         except Exception as e:
-            # Generate request_id if not present
             request_id = getattr(request.state, "request_id", str(uuid.uuid4()))
+            user_id = request.headers.get("X-User-ID", "anonymous")
             
-            # Log error with full context
-            error_data = {
-                "timestamp": datetime.utcnow().isoformat(),
-                "level": "ERROR",
-                "module": "error_handler",
-                "request_id": request_id,
-                "method": request.method,
-                "path": request.url.path,
-                "error_type": type(e).__name__,
-                "error_message": str(e),
-                "message": "Unhandled exception"
-            }
-            logger.error(json.dumps(error_data))
+            logger.error(
+                "UNHANDLED_ERROR",
+                extra={
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "method": request.method,
+                    "path": request.url.path,
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+                exc_info=True
+            )
             
-            # Return error response
+            # Возвращаем стандартный ответ об ошибке
+            from fastapi.responses import JSONResponse
             return JSONResponse(
                 status_code=500,
                 content={
-                    "detail": "Internal server error",
+                    "error": "Internal Server Error",
                     "request_id": request_id,
-                    "error_type": type(e).__name__
+                    "detail": str(e) if request.app.debug else "An unexpected error occurred"
                 }
             )

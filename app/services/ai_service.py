@@ -4,17 +4,20 @@
 import httpx
 from typing import Optional
 from loguru import logger
+import time
 
 from app.config import settings
 
 
 class AIService:
     """Сервис для работы с AI"""
-    
+
     def __init__(self):
         self.api_key = settings.AI_API_KEY
         self.api_url = settings.AI_API_URL
         self.model = settings.AI_MODEL
+        self.request_count = 0
+        self.error_count = 0
     
     async def adapt_text(
         self,
@@ -33,6 +36,9 @@ class AIService:
         Returns:
             Адаптированный текст
         """
+        start_time = time.time()
+        self.request_count += 1
+        
         if not self.api_key:
             logger.warning("⚠️ AI API key не настроен, возвращаем исходный текст")
             return original_text
@@ -59,7 +65,14 @@ class AIService:
 
         system_prompt = prompt or default_prompt
         
-        logger.info(f"🤖 AI адаптация: {len(original_text)} символов, промт: {'кастомный' if prompt else 'по умолчанию'}")
+        logger.debug(
+            "AI_ADAPT_START",
+            extra={
+                "text_length": len(original_text),
+                "prompt_type": "custom" if prompt else "default",
+                "model": self.model,
+            }
+        )
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -83,17 +96,70 @@ class AIService:
                 if response.status_code == 200:
                     data = response.json()
                     adapted = data["choices"][0]["message"]["content"]
-                    logger.info(f"✅ AI адаптация успешна: {len(adapted)} символов")
+                    duration = time.time() - start_time
+                    
+                    logger.info(
+                        "AI_ADAPT_SUCCESS",
+                        extra={
+                            "input_length": len(original_text),
+                            "output_length": len(adapted),
+                            "duration_ms": round(duration * 1000, 2),
+                            "model": self.model,
+                        }
+                    )
                     return adapted.strip()
                 else:
-                    logger.error(f"❌ AI API error: {response.status_code} - {response.text}")
+                    self.error_count += 1
+                    logger.error(
+                        "AI_API_ERROR",
+                        extra={
+                            "status_code": response.status_code,
+                            "response_body": response.text[:500],
+                            "api_url": self.api_url,
+                            "total_requests": self.request_count,
+                            "total_errors": self.error_count,
+                        }
+                    )
                     return original_text
 
         except httpx.TimeoutException as e:
-            logger.error(f"❌ AI сервис: таймаут запроса ({e})")
+            self.error_count += 1
+            logger.error(
+                "AI_TIMEOUT",
+                extra={
+                    "timeout_seconds": 60,
+                    "model": self.model,
+                    "error": str(e),
+                    "total_requests": self.request_count,
+                    "total_errors": self.error_count,
+                }
+            )
+            return original_text
+        except httpx.RequestError as e:
+            self.error_count += 1
+            logger.error(
+                "AI_REQUEST_ERROR",
+                extra={
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "api_url": self.api_url,
+                    "total_requests": self.request_count,
+                    "total_errors": self.error_count,
+                }
+            )
             return original_text
         except Exception as e:
-            logger.error(f"❌ Ошибка AI сервиса: {e}")
+            self.error_count += 1
+            logger.error(
+                "AI_UNEXPECTED_ERROR",
+                extra={
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "total_requests": self.request_count,
+                    "total_errors": self.error_count,
+                },
+                exc_info=True
+            )
             return original_text
     
     async def generate_title(

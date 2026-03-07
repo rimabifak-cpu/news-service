@@ -14,6 +14,10 @@ from app.config import settings
 from app.database import init_db
 from app.api.routes import router as api_router
 from app.middleware import RequestTracingMiddleware, ErrorHandlingMiddleware
+from app.logging_config import setup_logging
+
+# Настройка логирования
+setup_logging(log_level="INFO", log_format="text")
 
 
 @asynccontextmanager
