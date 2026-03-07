@@ -374,11 +374,9 @@ async def publish_post(
         raise HTTPException(status_code=500, detail="Канал не найден")
 
     # Формируем текст поста
-    title = post.adapted_title or post.original_title or "Без заголовка"
     content = post.adapted_content or post.original_content or ""
-    original_url = post.original_url or ""
 
-    text = f"<b>{title}</b>\n\n{content}\n\n<a href='{original_url}'>Источник</a>"
+    text = f"{content}"
     logger.info(f"Текст поста: {text[:200]}...")
 
     # Проверяем путь к изображению
