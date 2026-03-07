@@ -4,6 +4,7 @@
 from datetime import datetime, timezone, timedelta
 from typing import Optional, List
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 from loguru import logger
 import os
@@ -41,9 +42,11 @@ class NewsProcessor:
             Количество обработанных постов
         """
         async with async_session_maker() as session:
-            # Получаем источник
+            # Получаем источник с загруженной связью channel
             result = await session.execute(
-                select(Source).where(Source.id == source_id)
+                select(Source)
+                .options(joinedload(Source.channel))
+                .where(Source.id == source_id)
             )
             source = result.scalar_one_or_none()
 
@@ -191,16 +194,31 @@ class NewsProcessor:
         # Получаем канал из источника
         channel = source.channel
 
+        # Проверяем, привязан ли источник к каналу
+        if not channel:
+            logger.warning(f"  ⚠️ Источник {source.id} не привязан к каналу! Пост не может быть опубликован.")
+            post.status = PostStatus.READY.value
+            await session.commit()
+            return
+
         # Адаптируем текст через AI с промтом канала или источника
         if source.ai_enabled:
             # Используем промт источника, если есть, иначе промт канала
             ai_prompt = source.ai_prompt or (channel.ai_prompt if channel else None)
 
-            adapted_content = await ai_service.adapt_text(
-                item.content,
-                ai_prompt
-            )
-            adapted_title = await ai_service.generate_title(item.content)
+            try:
+                logger.info(f"  🤖 AI адаптация поста ID={post.id}...")
+                adapted_content = await ai_service.adapt_text(
+                    item.content,
+                    ai_prompt
+                )
+                adapted_title = await ai_service.generate_title(item.content)
+                logger.info(f"  ✓ AI адаптация завершена для поста ID={post.id}")
+            except Exception as e:
+                logger.error(f"  ❌ Ошибка AI адаптации поста ID={post.id}: {e}")
+                # При ошибке AI используем исходный текст
+                adapted_content = item.content
+                adapted_title = item.title
 
             post.adapted_content = adapted_content
             post.adapted_title = adapted_title
@@ -215,7 +233,7 @@ class NewsProcessor:
                 post.processed_image_path = image_path
 
         # Если включена автопубликация — публикуем сразу
-        if source.auto_publish and channel:
+        if source.auto_publish:
             logger.info(f"  🚀 Автопубликация поста ID={post.id} в канал {channel.name}...")
             post.status = PostStatus.READY.value
             post.channel_id = channel.id
@@ -256,15 +274,14 @@ class NewsProcessor:
 
             except Exception as e:
                 logger.error(f"  ❌ Ошибка автопубликации поста {post.id}: {e}")
-                post.status = PostStatus.READY.value  # Возвращаем в готовые если ошибка
+                post.status = PostStatus.READY.value
                 await session.commit()
         else:
-            # Без автопубликации — оставляем в готовых
+            # Без автопубликации — устанавливаем статус READY
             post.status = PostStatus.READY.value
-            if channel:
-                post.channel_id = channel.id
+            post.channel_id = channel.id
             await session.commit()
-            logger.info(f"  ✓ Пост {post.id} готов к публикации")
+            logger.info(f"  ✓ Пост {post.id} готов к публикации (статус: READY)")
     
     async def _process_image(
         self,
