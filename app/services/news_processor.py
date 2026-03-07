@@ -172,7 +172,7 @@ class NewsProcessor:
         )
 
         session.add(post)
-        await session.commit()  # Сохраняем пост сразу
+        await session.flush()  # Получаем ID поста
 
         title_preview = item.title[:50].replace('\n', ' ') if item.title else "Без заголовка"
         logger.info(f"  ✓ Обработка поста ID={post.id}: {title_preview}...")
@@ -180,33 +180,13 @@ class NewsProcessor:
         # Проверяем на рекламу (хэштеги #реклама, #ad, #sponsored)
         content_lower = (item.content or "").lower()
         title_lower = (item.title or "").lower()
-        
+
         ad_markers = ['#реклама', '#ad', '#sponsored', '#партнёр', '#партнер', 'реклама:', 'на правах рекламы']
         is_ad = any(marker in content_lower or marker in title_lower for marker in ad_markers)
-        
+
         if is_ad:
             post.is_advertisement = True
             logger.info(f"  ⚠️ Обнаружена реклама в посте ID={post.id}")
-
-        # Адаптируем текст через AI
-        if source.ai_enabled:
-            adapted_content = await ai_service.adapt_text(
-                item.content,
-                source.ai_prompt
-            )
-            adapted_title = await ai_service.generate_title(item.content)
-
-            post.adapted_content = adapted_content
-            post.adapted_title = adapted_title
-        else:
-            post.adapted_content = item.content
-            post.adapted_title = item.title
-
-        # Обрабатываем изображение
-        if item.image_url:
-            image_path = await self._process_image(item.image_url, post.id)
-            if image_path:
-                post.processed_image_path = image_path
 
         # Получаем канал из источника
         channel = source.channel
@@ -215,7 +195,7 @@ class NewsProcessor:
         if source.ai_enabled:
             # Используем промт источника, если есть, иначе промт канала
             ai_prompt = source.ai_prompt or (channel.ai_prompt if channel else None)
-            
+
             adapted_content = await ai_service.adapt_text(
                 item.content,
                 ai_prompt
