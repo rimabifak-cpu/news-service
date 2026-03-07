@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from typing import List, Optional
 from pydantic import BaseModel
 from loguru import logger
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 from app.database import get_db
 from app.models.db_models import Source, Post, PostStatus, SourceType, Channel
@@ -401,7 +401,7 @@ async def publish_post(
     if message_id:
         post.status = PostStatus.PUBLISHED.value
         post.telegram_message_id = message_id
-        post.published_at = datetime.now()
+        post.published_at = datetime.now(timezone.utc) + timedelta(hours=3)  # Moscow time
         post.channel_id = channel.id
         await db.commit()
 

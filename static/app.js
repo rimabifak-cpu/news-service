@@ -352,7 +352,7 @@ function renderPostsList(posts) {
                         <span class="status-badge status-${post.status}">${post.status}</span>
                     </div>
                     <p class="text-muted small mb-2">
-                        <i class="bi bi-clock"></i> ${new Date(post.created_at).toLocaleString('ru-RU')}
+                        <i class="bi bi-clock"></i> ${new Date(post.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </p>
                     <div class="post-content mb-3">${escapeHtml(post.adapted_content || post.original_content || '')}</div>
                     ${post.status === 'ready' ? `

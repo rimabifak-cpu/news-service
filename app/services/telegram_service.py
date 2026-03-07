@@ -98,6 +98,9 @@ class TelegramService:
 
         except Exception as e:
             logger.error(f"Ошибка публикации в Telegram: {e}", exc_info=True)
+            # Логируем детали ошибки для отладки
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return None
     
     async def edit_post(
