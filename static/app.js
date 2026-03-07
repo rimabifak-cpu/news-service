@@ -239,13 +239,14 @@ function renderRecentPosts(posts) {
         container.innerHTML = '<p class="text-muted">Нет постов</p>';
         return;
     }
-    
+
     container.innerHTML = posts.map(post => `
         <div class="post-card">
             <div class="d-flex justify-content-between align-items-start">
                 <div class="flex-grow-1">
                     <div class="post-title">${escapeHtml(post.adapted_title || post.original_title)}</div>
                     <div class="post-content">${escapeHtml(post.adapted_content || post.original_content || '')}</div>
+                    ${post.channel_name ? `<div class="text-muted small mt-1"><i class="bi bi-broadcast"></i> ${escapeHtml(post.channel_name)}</div>` : ''}
                 </div>
                 <span class="status-badge status-${post.status}">${post.status}</span>
             </div>
@@ -354,6 +355,11 @@ function renderPostsList(posts) {
                     <p class="text-muted small mb-2">
                         <i class="bi bi-clock"></i> ${new Date(post.created_at).toLocaleString('ru-RU', { timeZone: 'Europe/Moscow', hour12: false, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                     </p>
+                    ${post.channel_id ? `
+                    <p class="text-muted small mb-2">
+                        <i class="bi bi-broadcast"></i> Канал публикации: <strong>${escapeHtml(post.channel_name || 'Канал #' + post.channel_id)}</strong>
+                    </p>
+                    ` : '<p class="text-warning small mb-2"><i class="bi bi-exclamation-triangle"></i> Канал не указан</p>'}
                     <div class="post-content mb-3">${escapeHtml(post.adapted_content || post.original_content || '')}</div>
                     ${post.status === 'ready' ? `
                         <button class="btn btn-publish btn-sm" onclick="publishPost(${post.id})">

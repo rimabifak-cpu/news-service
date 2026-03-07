@@ -71,6 +71,7 @@ class PostResponse(BaseModel):
     id: int
     source_id: int
     channel_id: Optional[int]
+    channel_name: Optional[str] = None  # Название канала для отображения
     original_title: str
     adapted_title: Optional[str]
     adapted_content: Optional[str]
@@ -301,21 +302,51 @@ async def get_posts(
     db: AsyncSession = Depends(get_db)
 ):
     """Получить список постов"""
+    from sqlalchemy.orm import joinedload
+    
     query = select(Post).order_by(Post.created_at.desc())
 
     if status_filter:
         query = query.where(Post.status == status_filter)
-    
+
     if channel_id:
         query = query.where(Post.channel_id == channel_id)
-    
+
     if is_advertisement is not None:
         query = query.where(Post.is_advertisement == is_advertisement)
 
     query = query.offset(skip).limit(limit)
 
     result = await db.execute(query)
-    return result.scalars().all()
+    posts = result.scalars().all()
+    
+    # Добавляем названия каналов
+    posts_with_channels = []
+    for post in posts:
+        post_dict = {
+            "id": post.id,
+            "source_id": post.source_id,
+            "channel_id": post.channel_id,
+            "channel_name": None,
+            "original_title": post.original_title,
+            "adapted_title": post.adapted_title,
+            "adapted_content": post.adapted_content,
+            "status": post.status,
+            "is_advertisement": post.is_advertisement,
+            "processed_image_path": post.processed_image_path,
+            "created_at": post.created_at,
+        }
+        
+        # Получаем название канала
+        if post.channel_id:
+            channel_result = await db.execute(select(Channel).where(Channel.id == post.channel_id))
+            channel = channel_result.scalar_one_or_none()
+            if channel:
+                post_dict["channel_name"] = channel.name
+        
+        posts_with_channels.append(post_dict)
+    
+    return posts_with_channels
 
 
 @router.get("/posts/{post_id}", response_model=PostResponse)

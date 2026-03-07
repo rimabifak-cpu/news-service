@@ -1,0 +1,249 @@
+=================================================================
+ИСПРАВЛЕНИЕ ПРОБЛЕМЫ СО СТАТУСОМ "PROCESSING"
+=================================================================
+
+Проблема: Посты застревают в статусе "processing" и не дают опубликовать статьи
+
+Причина: 
+1. Отсутствует joinedload при загрузке источника (channel не загружается)
+2. Нет проверки на привязку источника к каналу
+3. Нет обработки ошибок AI адаптации
+
+-----------------------------------------------------------------
+ИНСТРУКЦИЯ ПО ПРИМЕНЕНИЮ ИСПРАВЛЕНИЙ
+-----------------------------------------------------------------
+
+ШАГ 1: Подключиться к серверу
+------------------------------
+ssh root@195.133.31.34
+Пароль: JGKja6YUUF
+
+
+ШАГ 2: Перейти в директорию проекта
+------------------------------------
+cd /opt/news_service
+
+
+ШАГ 3: Создать резервную копию
+------------------------------
+cp app/services/news_processor.py app/services/news_processor.py.backup
+
+
+ШАГ 4: Исправить файл news_processor.py
+----------------------------------------
+Откройте файл:
+nano app/services/news_processor.py
+
+Внесите следующие изменения:
+
+┌─────────────────────────────────────────────────────────────┐
+│ ИЗМЕНЕНИЕ 1: Добавить импорт joinedload                    │
+└─────────────────────────────────────────────────────────────┘
+
+Найти строку (примерно строка 5):
+    from sqlalchemy import select
+
+Заменить на:
+    from sqlalchemy import select
+    from sqlalchemy.orm import joinedload
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ ИЗМЕНЕНИЕ 2: Исправить загрузку источника                  │
+└─────────────────────────────────────────────────────────────┘
+
+Найти блок (примерно строки 46-50):
+    async with async_session_maker() as session:
+        # Получаем источник
+        result = await session.execute(
+            select(Source).where(Source.id == source_id)
+        )
+        source = result.scalar_one_or_none()
+
+Заменить на:
+    async with async_session_maker() as session:
+        # Получаем источник с загруженной связью channel
+        result = await session.execute(
+            select(Source)
+            .options(joinedload(Source.channel))
+            .where(Source.id == source_id)
+        )
+        source = result.scalar_one_or_none()
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ ИЗМЕНЕНИЕ 3: Добавить проверку канала                      │
+└─────────────────────────────────────────────────────────────┘
+
+Найти строки (примерно 193-195):
+    # Получаем канал из источника
+    channel = source.channel
+
+    # Адаптируем текст через AI с промтом канала или источника
+
+Вставить ПОСЛЕ "channel = source.channel":
+    # Проверяем, привязан ли источник к каналу
+    if not channel:
+        logger.warning(f"  ⚠️ Источник {source.id} не привязан к каналу! Пост не может быть опубликован.")
+        post.status = PostStatus.READY.value
+        await session.commit()
+        return
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ ИЗМЕНЕНИЕ 4: Обработать ошибки AI                          │
+└─────────────────────────────────────────────────────────────┘
+
+Найти блок (примерно строки 196-207):
+    if source.ai_enabled:
+        # Используем промт источника, если есть, иначе промт канала
+        ai_prompt = source.ai_prompt or (channel.ai_prompt if channel else None)
+
+        adapted_content = await ai_service.adapt_text(
+            item.content,
+            ai_prompt
+        )
+        adapted_title = await ai_service.generate_title(item.content)
+
+        post.adapted_content = adapted_content
+        post.adapted_title = adapted_title
+
+Заменить на:
+    if source.ai_enabled:
+        # Используем промт источника, если есть, иначе промт канала
+        ai_prompt = source.ai_prompt or (channel.ai_prompt if channel else None)
+
+        try:
+            logger.info(f"  🤖 AI адаптация поста ID={post.id}...")
+            adapted_content = await ai_service.adapt_text(
+                item.content,
+                ai_prompt
+            )
+            adapted_title = await ai_service.generate_title(item.content)
+            logger.info(f"  ✓ AI адаптация завершена для поста ID={post.id}")
+        except Exception as e:
+            logger.error(f"  ❌ Ошибка AI адаптации поста ID={post.id}: {e}")
+            # При ошибке AI используем исходный текст
+            adapted_content = item.content
+            adapted_title = item.title
+
+        post.adapted_content = adapted_content
+        post.adapted_title = adapted_title
+
+
+┌─────────────────────────────────────────────────────────────┐
+│ ИЗМЕНЕНИЕ 5: Исправить блок else (конец обработки)         │
+└─────────────────────────────────────────────────────────────┘
+
+Найти блок (примерно строки 270-275):
+    else:
+        # Без автопубликации — оставляем в готовых
+        post.status = PostStatus.READY.value
+        if channel:
+            post.channel_id = channel.id
+        await session.commit()
+        logger.info(f"  ✓ Пост {post.id} готов к публикации")
+
+Заменить на:
+    else:
+        # Без автопубликации — устанавливаем статус READY
+        post.status = PostStatus.READY.value
+        post.channel_id = channel.id
+        await session.commit()
+        logger.info(f"  ✓ Пост {post.id} готов к публикации (статус: READY)")
+
+
+─────────────────────────────────────────────────────────────
+Сохранить файл: Ctrl+O → Enter
+Выйти: Ctrl+X
+─────────────────────────────────────────────────────────────
+
+
+ШАГ 5: Исправить существующие посты (перевести из PROCESSING в READY)
+----------------------------------------------------------------------
+Создать скрипт исправления:
+nano fix_processing_posts.py
+
+Вставить содержимое:
+------------------------------------------------------------
+import asyncio
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from sqlalchemy import select
+from app.database import async_session_maker
+from app.models.db_models import Post, PostStatus
+
+
+async def fix_processing_posts():
+    async with async_session_maker() as session:
+        result = await session.execute(
+            select(Post).where(Post.status == PostStatus.PROCESSING.value)
+        )
+        processing_posts = result.scalars().all()
+        
+        if not processing_posts:
+            print("✅ Постов со статусом PROCESSING не найдено")
+            return
+        
+        print(f"Найдено постов в статусе PROCESSING: {len(processing_posts)}")
+        
+        fixed_count = 0
+        for post in processing_posts:
+            if post.channel_id:
+                post.status = PostStatus.READY.value
+                fixed_count += 1
+                print(f"  ✓ Пост {post.id} переведён в READY")
+            else:
+                print(f"  ⚠️ Пост {post.id} не имеет channel_id, пропускаем")
+        
+        await session.commit()
+        print(f"\n✅ Исправлено постов: {fixed_count}")
+
+
+if __name__ == "__main__":
+    asyncio.run(fix_processing_posts())
+------------------------------------------------------------
+
+Сохранить: Ctrl+O → Enter
+Выйти: Ctrl+X
+
+Запустить скрипт:
+python3 fix_processing_posts.py
+
+
+ШАГ 6: Перезапустить сервис
+----------------------------
+docker-compose restart news_service
+
+
+ШАГ 7: Проверить логи
+----------------------
+docker-compose logs -f news_service
+
+Нажать Ctrl+C для выхода из логов
+
+
+-----------------------------------------------------------------
+ПРОВЕРКА РАБОТОСПОСОБНОСТИ
+-----------------------------------------------------------------
+
+1. Откройте админ панель: http://195.133.31.34:8001
+2. Перейдите в "Лента постов"
+3. Новые посты должны иметь статус "Готовы" (READY)
+4. Кнопка "Опубликовать" должна быть активна
+
+-----------------------------------------------------------------
+ЕСЛИ ЧТО-ТО ПОШЛО НЕ ТАК
+-----------------------------------------------------------------
+
+Восстановить из резервной копии:
+cp app/services/news_processor.py.backup app/services/news_processor.py
+docker-compose restart news_service
+
+Проверить логи на ошибки:
+docker-compose logs news_service | tail -50
+
+=================================================================
