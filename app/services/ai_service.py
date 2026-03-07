@@ -24,19 +24,23 @@ class AIService:
     ) -> str:
         """
         Адаптация текста под стиль Telegram-канала
-        
+
         Args:
             original_text: Исходный текст
             prompt: Пользовательский промт (опционально)
             max_length: Максимальная длина результата
-        
+
         Returns:
             Адаптированный текст
         """
         if not self.api_key:
-            logger.warning("AI API key не настроен, возвращаем исходный текст")
+            logger.warning("⚠️ AI API key не настроен, возвращаем исходный текст")
             return original_text
         
+        if not original_text or len(original_text.strip()) == 0:
+            logger.warning("⚠️ Пустой текст для адаптации, возвращаем пустую строку")
+            return original_text
+
         default_prompt = """
 Адаптируй этот текст для публикации в Telegram-канале:
 - Сделай текст более живым и engaging
@@ -46,15 +50,17 @@ class AIService:
 - Сохрани основной смысл и факты
 - Длина до 2000 символов
 
-⚠️ ВАЖНО: 
+⚠️ ВАЖНО:
 - НЕ выдумывай новые факты, цитаты или детали
 - НЕ добавляй информацию, которой нет в исходном тексте
 - ТОЧНО передавай факты из оригинала
 - Если в оригинале есть сомнения — сохраняй их
 """
-        
+
         system_prompt = prompt or default_prompt
         
+        logger.info(f"🤖 AI адаптация: {len(original_text)} символов, промт: {'кастомный' if prompt else 'по умолчанию'}")
+
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
@@ -73,17 +79,21 @@ class AIService:
                         "temperature": 0.7
                     }
                 )
-                
+
                 if response.status_code == 200:
                     data = response.json()
                     adapted = data["choices"][0]["message"]["content"]
+                    logger.info(f"✅ AI адаптация успешна: {len(adapted)} символов")
                     return adapted.strip()
                 else:
-                    logger.error(f"AI API error: {response.status_code} - {response.text}")
+                    logger.error(f"❌ AI API error: {response.status_code} - {response.text}")
                     return original_text
-                    
+
+        except httpx.TimeoutException as e:
+            logger.error(f"❌ AI сервис: таймаут запроса ({e})")
+            return original_text
         except Exception as e:
-            logger.error(f"Ошибка AI сервиса: {e}")
+            logger.error(f"❌ Ошибка AI сервиса: {e}")
             return original_text
     
     async def generate_title(
