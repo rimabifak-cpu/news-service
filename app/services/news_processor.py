@@ -57,7 +57,14 @@ class NewsProcessor:
             logger.info(f"=" * 60)
             logger.info(f"ИСТОЧНИК: {source.name} ({source.source_type})")
             logger.info(f"URL: {source.url}")
+            logger.info(f"Канал: {source.channel.name if source.channel else '❌ НЕ ПРИВЯЗАН'} (ID={source.channel_id})")
             logger.info(f"=" * 60)
+            
+            # Проверяем, привязан ли источник к каналу
+            if not source.channel:
+                logger.error(f"❌ Источник {source.name} НЕ ПРИВЯЗАН к каналу!")
+                logger.error(f"   В админ-панели: Источники → {source.name} → выберите канал")
+                return 0
 
             # Получаем парсер
             parser = self._get_parser(source)
@@ -144,7 +151,7 @@ class NewsProcessor:
         item: ParsedItem
     ):
         """Обработка отдельного поста"""
-        # Вычисляем хеш контента
+        # Вычисляем хеш контента для дедупликации
         content_for_hash = f"{item.title}|{item.content}".encode('utf-8')
         content_hash = hashlib.sha256(content_for_hash).hexdigest()
 
@@ -170,8 +177,9 @@ class NewsProcessor:
             original_url=item.url,
             original_image_url=item.image_url,
             original_published_at=_to_naive_datetime(item.published_at),
-            content_hash=content_hash,  # Сохраняем хеш для дедупликации
-            status=PostStatus.PROCESSING.value
+            content_hash=content_hash,
+            status=PostStatus.PROCESSING.value,
+            channel_id=source.channel_id  # Сразу копируем channel_id из источника
         )
 
         session.add(post)
@@ -179,6 +187,7 @@ class NewsProcessor:
 
         title_preview = item.title[:50].replace('\n', ' ') if item.title else "Без заголовка"
         logger.info(f"  ✓ Обработка поста ID={post.id}: {title_preview}...")
+        logger.info(f"    Канал ID: {post.channel_id} (из источника)")
 
         try:
             await self._process_post_content(session, source, item, post)
@@ -209,20 +218,18 @@ class NewsProcessor:
             post.is_advertisement = True
             logger.info(f"  ⚠️ Обнаружена реклама в посте ID={post.id}")
 
-        # Получаем канал из источника
+        # channel_id уже установлен при создании поста
+        # Получаем объект канала для доступа к настройкам
         channel = source.channel
-
-        # Проверяем, привязан ли источник к каналу
+        
         if not channel:
-            logger.warning(f"  ⚠️ Источник {source.id} не привязан к каналу! Пост не может быть опубликован.")
-            post.status = PostStatus.READY.value
-            post.adapted_content = post.original_content or ""
-            post.adapted_title = post.original_title or ""
-            await session.commit()
-            return
-
-        # Сразу устанавливаем channel_id из источника
-        post.channel_id = channel.id
+            # Канал не загружен — используем channel_id для публикации
+            logger.warning(f"  ⚠️ Канал не загружен для поста ID={post.id}, используем channel_id={post.channel_id}")
+            # Для AI адаптации нужен промт — пробуем получить из источника
+            ai_prompt = source.ai_prompt
+        else:
+            logger.info(f"  ✓ Канал: {channel.name} (ID={channel.id})")
+            ai_prompt = source.ai_prompt or channel.ai_prompt
 
         # Адаптируем текст через AI с промтом канала или источника
         if source.ai_enabled:
