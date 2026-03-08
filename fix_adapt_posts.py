@@ -20,7 +20,7 @@ from app.services.ai_service import ai_service
 async def adapt_post(session: AsyncSession, post: Post, source: Source, channel: Channel) -> bool:
     """Адаптировать один пост"""
     try:
-        # Получаем оригинальный контент
+        # Получаем оригинальный контент (с резервированием)
         original_text = post.original_content or ""
         original_title = post.original_title or ""
         
@@ -32,6 +32,8 @@ async def adapt_post(session: AsyncSession, post: Post, source: Source, channel:
         ai_prompt = source.ai_prompt or (channel.ai_prompt if channel else None)
         
         logger.info(f"Пост {post.id}: адаптация текста...")
+        logger.debug(f"  Промт: {'кастомный' if ai_prompt else 'дефолтный'}")
+        logger.debug(f"  Длина текста: {len(original_text)} символов")
         
         # Адаптируем контент
         adapted_content = await ai_service.adapt_text(original_text, ai_prompt)
@@ -52,7 +54,7 @@ async def adapt_post(session: AsyncSession, post: Post, source: Source, channel:
         return True
         
     except Exception as e:
-        logger.error(f"Пост {post.id}: ошибка адаптации - {e}")
+        logger.error(f"Пост {post.id}: ошибка адаптации - {e}", exc_info=True)
         await session.rollback()
         return False
 

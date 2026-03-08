@@ -208,26 +208,39 @@ class NewsProcessor:
         if source.ai_enabled:
             # Используем промт источника, если есть, иначе промт канала
             ai_prompt = source.ai_prompt or (channel.ai_prompt if channel else None)
+            
+            # Проверяем, есть ли контент для адаптации
+            content_for_adaptation = item.content or post.original_content or ""
+            
+            if not content_for_adaptation:
+                logger.warning(f"  ⚠️ Пост ID={post.id}: пустой контент, пропускаем AI адаптацию")
+                post.adapted_content = ""
+                post.adapted_title = post.original_title
+            else:
+                try:
+                    logger.info(f"  🤖 AI адаптация поста ID={post.id}...")
+                    logger.debug(f"    Промт: {'кастомный' if ai_prompt else 'дефолтный'}")
+                    logger.debug(f"    Длина контента: {len(content_for_adaptation)} символов")
+                    
+                    adapted_content = await ai_service.adapt_text(
+                        content_for_adaptation,
+                        ai_prompt
+                    )
+                    adapted_title = await ai_service.generate_title(content_for_adaptation)
+                    logger.info(f"  ✓ AI адаптация завершена для поста ID={post.id}")
+                    logger.debug(f"    Результат: {len(adapted_content)} символов")
+                except Exception as e:
+                    logger.error(f"  ❌ Ошибка AI адаптации поста ID={post.id}: {e}", exc_info=True)
+                    # При ошибке AI используем исходный текст
+                    adapted_content = content_for_adaptation
+                    adapted_title = post.original_title or item.title
 
-            try:
-                logger.info(f"  🤖 AI адаптация поста ID={post.id}...")
-                adapted_content = await ai_service.adapt_text(
-                    item.content,
-                    ai_prompt
-                )
-                adapted_title = await ai_service.generate_title(item.content)
-                logger.info(f"  ✓ AI адаптация завершена для поста ID={post.id}")
-            except Exception as e:
-                logger.error(f"  ❌ Ошибка AI адаптации поста ID={post.id}: {e}")
-                # При ошибке AI используем исходный текст
-                adapted_content = item.content
-                adapted_title = item.title
-
-            post.adapted_content = adapted_content
-            post.adapted_title = adapted_title
+                post.adapted_content = adapted_content
+                post.adapted_title = adapted_title
         else:
-            post.adapted_content = item.content
-            post.adapted_title = item.title
+            logger.info(f"  ℹ️ AI отключён для источника {source.name}, используем исходный текст")
+            post.adapted_content = item.content or post.original_content or ""
+            post.adapted_title = post.original_title or item.title
 
         # Обрабатываем изображение
         if item.image_url:
