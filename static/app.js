@@ -218,15 +218,10 @@ async function deleteChannel(channelId) {
 async function loadSettings() {
     try {
         const settings = await fetch(`${API_BASE}/api/settings`).then(r => r.json());
-        
+
         document.getElementById('ai-api-key').value = settings.ai_api_key || 'Не настроен';
         document.getElementById('ai-api-url').value = settings.ai_api_url || '';
         document.getElementById('ai-model').value = settings.ai_model || '';
-        document.getElementById('bot-token').value = settings.telegram_bot_token || 'Не настроен';
-        document.getElementById('channel-id').value = settings.telegram_channel_id || '';
-        document.getElementById('logo-path').value = settings.logo_path || '';
-        document.getElementById('logo-position').value = settings.logo_position || '';
-        document.getElementById('logo-opacity').value = settings.logo_opacity || '';
         document.getElementById('parser-interval').value = settings.parser_interval || '';
     } catch (error) {
         console.error('Error loading settings:', error);
