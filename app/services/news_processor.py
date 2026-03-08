@@ -156,7 +156,7 @@ class NewsProcessor:
             )
         )
         existing_post = result.scalar_one_or_none()
-        
+
         if existing_post:
             logger.debug(f"  ✗ ПРОПУЩЕН (дубликат): {item.url[:80]}...")
             logger.debug(f"    Существующий пост ID: {existing_post.id}")
@@ -180,6 +180,24 @@ class NewsProcessor:
         title_preview = item.title[:50].replace('\n', ' ') if item.title else "Без заголовка"
         logger.info(f"  ✓ Обработка поста ID={post.id}: {title_preview}...")
 
+        try:
+            await self._process_post_content(session, source, item, post)
+        except Exception as e:
+            # Критическая ошибка — ставим READY чтобы пост не застрял
+            logger.error(f"  ❌ Критическая ошибка обработки поста ID={post.id}: {e}", exc_info=True)
+            post.status = PostStatus.READY.value
+            post.adapted_content = post.original_content or ""
+            post.adapted_title = post.original_title or ""
+            await session.commit()
+
+    async def _process_post_content(
+        self,
+        session: AsyncSession,
+        source: Source,
+        item: ParsedItem,
+        post: Post
+    ):
+        """Обработка контента поста (AI, изображение, публикация)"""
         # Проверяем на рекламу (хэштеги #реклама, #ad, #sponsored)
         content_lower = (item.content or "").lower()
         title_lower = (item.title or "").lower()
@@ -198,6 +216,8 @@ class NewsProcessor:
         if not channel:
             logger.warning(f"  ⚠️ Источник {source.id} не привязан к каналу! Пост не может быть опубликован.")
             post.status = PostStatus.READY.value
+            post.adapted_content = post.original_content or ""
+            post.adapted_title = post.original_title or ""
             await session.commit()
             return
 
