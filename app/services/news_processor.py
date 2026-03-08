@@ -169,9 +169,15 @@ class NewsProcessor:
             logger.debug(f"    Существующий пост ID: {existing_post.id}")
             return
 
-        # Создаём пост
+        # Проверяем, привязан ли источник к каналу
+        if not source.channel_id:
+            logger.error(f"  ❌ Источник {source.name} НЕ ПРИВЯЗАН к каналу! Пропускаем пост.")
+            return
+
+        # Создаём пост СРАЗУ с channel_id и статусом PROCESSING
         post = Post(
             source_id=source.id,
+            channel_id=source.channel_id,  # Копируем из источника
             original_title=item.title,
             original_content=item.content,
             original_url=item.url,
@@ -179,7 +185,9 @@ class NewsProcessor:
             original_published_at=_to_naive_datetime(item.published_at),
             content_hash=content_hash,
             status=PostStatus.PROCESSING.value,
-            channel_id=source.channel_id  # Сразу копируем channel_id из источника
+            # Копируем оригинал в адаптированное (на случай ошибки AI)
+            adapted_title=item.title,
+            adapted_content=item.content or ""
         )
 
         session.add(post)
@@ -189,14 +197,13 @@ class NewsProcessor:
         logger.info(f"  ✓ Обработка поста ID={post.id}: {title_preview}...")
         logger.info(f"    Канал ID: {post.channel_id} (из источника)")
 
-        try:
-            await self._process_post_content(session, source, item, post)
-        except Exception as e:
-            # Критическая ошибка — ставим READY чтобы пост не застрял
-            logger.error(f"  ❌ Критическая ошибка обработки поста ID={post.id}: {e}", exc_info=True)
+        # Обрабатываем пост — если ошибка, пост всё равно останется с channel_id
+        await self._process_post_content(session, source, item, post)
+        
+        # Гарантированно ставим READY, если пост всё ещё в PROCESSING
+        if post.status == PostStatus.PROCESSING.value:
+            logger.info(f"  ✓ Пост ID={post.id} переведён в READY")
             post.status = PostStatus.READY.value
-            post.adapted_content = post.original_content or ""
-            post.adapted_title = post.original_title or ""
             await session.commit()
 
     async def _process_post_content(
