@@ -4,7 +4,7 @@
 import asyncio
 import sys
 from sqlalchemy import select, update
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import selectinload
 from loguru import logger
 
 sys.path.insert(0, '.')
@@ -34,7 +34,7 @@ async def diagnose():
         # 2. Проверяем источники
         logger.info("\n📡 ИСТОЧНИКИ:")
         sources = (await session.execute(
-            select(Source).options(joinedload(Source.channel))
+            select(Source).options(selectinload(Source.channel))
         )).scalars().all()
         
         for src in sources:
@@ -47,12 +47,13 @@ async def diagnose():
         
         # 3. Проверяем посты
         logger.info("\n📝 ПОСТЫ:")
-        posts = (await session.execute(
+        posts_result = await session.execute(
             select(Post)
-            .options(joinedload(Post.source))
+            .options(selectinload(Post.source).selectinload(Source.channel))
             .order_by(Post.created_at.desc())
             .limit(20)
-        )).scalars().unique().all()
+        )
+        posts = posts_result.scalars().unique().all()
         
         status_counts = {}
         for post in posts:
@@ -93,7 +94,7 @@ async def fix_processing_posts():
         # Находим посты в PROCESSING без канала
         result = await session.execute(
             select(Post)
-            .options(joinedload(Post.source))
+            .options(selectinload(Post.source).selectinload(Source.channel))
             .where(Post.status == PostStatus.PROCESSING.value)
         )
         posts = result.scalars().unique().all()
@@ -105,14 +106,14 @@ async def fix_processing_posts():
         
         for post in posts:
             try:
-                # Получаем источник
+                # Получаем источник (уже загружен через selectinload)
                 source = post.source
                 if not source:
                     logger.error(f"Пост {post.id}: источник не найден")
                     error_count += 1
                     continue
                 
-                # Получаем канал из источника
+                # Получаем канал из источника (уже загружен через selectinload)
                 channel = source.channel
                 if not channel:
                     logger.error(f"Пост {post.id}: канал источника не найден")
