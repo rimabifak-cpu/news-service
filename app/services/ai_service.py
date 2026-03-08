@@ -63,8 +63,9 @@ class AIService:
 - Если в оригинале есть сомнения — сохраняй их
 """
 
-        system_prompt = prompt or default_prompt
-        
+        # Используем кастомный промт или дефолтный
+        system_instruction = prompt if prompt else default_prompt
+
         logger.debug(
             "AI_ADAPT_START",
             extra={
@@ -85,8 +86,8 @@ class AIService:
                     json={
                         "model": self.model,
                         "messages": [
-                            {"role": "system", "content": "Ты профессиональный редактор Telegram-канала."},
-                            {"role": "user", "content": f"{system_prompt}\n\nИсходный текст:\n{original_text[:5000]}"}
+                            {"role": "system", "content": system_instruction},
+                            {"role": "user", "content": f"Исходный текст:\n{original_text[:5000]}"}
                         ],
                         "max_tokens": 2000,
                         "temperature": 0.7
@@ -169,18 +170,20 @@ class AIService:
     ) -> str:
         """
         Генерация цепляющего заголовка
-        
+
         Args:
             content: Содержание поста
             max_length: Максимальная длина заголовка
-        
+
         Returns:
             Заголовок
         """
         if not self.api_key:
             # Возвращаем первую строку контента
             return content.split('\n')[0][:max_length]
-        
+
+        system_instruction = f"Ты создаёшь цепляющие заголовки для Telegram. Максимум {max_length} символов."
+
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
                 response = await client.post(
@@ -192,7 +195,7 @@ class AIService:
                     json={
                         "model": self.model,
                         "messages": [
-                            {"role": "system", "content": "Ты создаёшь цепляющие заголовки для Telegram. Максимум {max_length} символов."},
+                            {"role": "system", "content": system_instruction},
                             {"role": "user", "content": f"Создай цепляющий заголовок до {max_length} символов для этого текста:\n\n{content[:1000]}"}
                         ],
                         "max_tokens": 100,
