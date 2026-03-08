@@ -67,6 +67,11 @@ class SourceResponse(BaseModel):
         from_attributes = True
 
 
+class PostUpdate(BaseModel):
+    adapted_title: Optional[str] = None
+    adapted_content: Optional[str] = None
+
+
 class PostResponse(BaseModel):
     id: int
     source_id: int
@@ -484,6 +489,30 @@ async def toggle_advertisement(
         "message": "Пометка обновлена",
         "is_advertisement": post.is_advertisement
     }
+
+
+@router.put("/posts/{post_id}", response_model=dict)
+async def update_post(
+    post_id: int,
+    post_data: PostUpdate,
+    db: AsyncSession = Depends(get_db)
+):
+    """Обновить пост (заголовок и содержание)"""
+    result = await db.execute(select(Post).where(Post.id == post_id))
+    post = result.scalar_one_or_none()
+
+    if not post:
+        raise HTTPException(status_code=404, detail="Пост не найден")
+
+    # Обновляем только адаптированные поля
+    if post_data.adapted_title is not None:
+        post.adapted_title = post_data.adapted_title
+    if post_data.adapted_content is not None:
+        post.adapted_content = post_data.adapted_content
+
+    await db.commit()
+
+    return {"message": "Пост обновлён"}
 
 
 @router.get("/stats", response_model=dict)

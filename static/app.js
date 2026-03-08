@@ -360,6 +360,9 @@ function renderPostsList(posts) {
                     </p>
                     <div class="post-content mb-3">${escapeHtml(post.adapted_content || post.original_content || '')}</div>
                     ${post.status === 'ready' ? `
+                        <button class="btn btn-edit btn-sm" onclick="editPost(${post.id}, '${escapeJs(post.adapted_title || post.original_title)}', '${escapeJs(post.adapted_content || post.original_content || '')}')">
+                            <i class="bi bi-pencil"></i> Редактировать
+                        </button>
                         <button class="btn btn-publish btn-sm" onclick="publishPost(${post.id})">
                             <i class="bi bi-send"></i> Опубликовать
                         </button>
@@ -666,7 +669,7 @@ async function publishPost(postId) {
 
 async function rejectPost(postId) {
     if (!confirm('Отклонить этот пост?')) return;
-    
+
     try {
         await fetch(`${API_BASE}/api/posts/${postId}/reject`, { method: 'POST' });
         loadDashboard();
@@ -678,12 +681,62 @@ async function rejectPost(postId) {
     }
 }
 
+// Редактирование поста
+let editingPostId = null;
+
+function editPost(postId, title, content) {
+    editingPostId = postId;
+    document.getElementById('edit-post-title').value = title;
+    document.getElementById('edit-post-content').value = content;
+    new bootstrap.Modal(document.getElementById('editPostModal')).show();
+}
+
+async function updatePost() {
+    if (!editingPostId) return;
+
+    const title = document.getElementById('edit-post-title').value.trim();
+    const content = document.getElementById('edit-post-content').value.trim();
+
+    if (!title || !content) {
+        alert('Заголовок и содержание обязательны');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/api/posts/${editingPostId}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                adapted_title: title,
+                adapted_content: content
+            })
+        });
+
+        if (response.ok) {
+            bootstrap.Modal.getInstance(document.getElementById('editPostModal')).hide();
+            loadPosts();
+            alert('Пост обновлён');
+        } else {
+            const error = await response.json();
+            alert(`Ошибка: ${error.detail}`);
+        }
+    } catch (error) {
+        console.error('Error updating post:', error);
+        alert('Ошибка при обновлении');
+    }
+}
+
 // Utility
 function escapeHtml(text) {
     if (!text) return '';
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+function escapeJs(text) {
+    if (!text) return '';
+    return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 }
 
 // Settings functions
